@@ -58,7 +58,10 @@ public class UDPReceiver extends Thread {
             String reply = gson.toJson(Map.of(
                     "type", "REGISTERED",
                     "primary_ip", principal.ip.getHostAddress(),
-                    "primary_tcp_clients", principal.tcpPortClients
+                    "primary_tcp_clients", principal.tcpPortClients,
+                    "primary_tcp_peers", principal.tcpPortPeers
+
+
             ));
 
             send(socket, reply, packet);

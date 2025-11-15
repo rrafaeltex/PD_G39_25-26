@@ -7,6 +7,6 @@ public class MainDiretoria {
         UDPReceiver receiver = new UDPReceiver(portoUDP, direcao);
         receiver.start();
 
-        System.out.println("📡 Diretoria ativa no porto UDP " + portoUDP);
+        System.out.println("Diretoria ativa no porto UDP " + portoUDP);
     }
 }

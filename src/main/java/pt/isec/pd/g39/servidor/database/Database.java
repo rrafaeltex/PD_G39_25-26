@@ -1,28 +1,35 @@
 package pt.isec.pd.g39.servidor.database;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 
 public class Database {
 
-    private static final String DB_URL = "jdbc:sqlite:src/main/java/pt/isec/pd/g39/servidor/database/server.db";
+    private static String dbPath;
 
+    // Chamada no arranque do servidor com o diretório da BD
+    public static void configure(String dbFolder) {
+        dbPath = dbFolder + "/server.db";
+    }
+
+    private static String url() {
+        return "jdbc:sqlite:" + dbPath;
+    }
+
+    // Inicializa BD: cria tabelas se não existirem e garante db_version
     public static void init() {
         Connection conn = null;
         Statement stmt = null;
 
         try {
-
-            conn = DriverManager.getConnection(DB_URL);
-
+            conn = DriverManager.getConnection(url());
             stmt = conn.createStatement();
 
             stmt.execute("CREATE TABLE IF NOT EXISTS config (" +
                     "key TEXT PRIMARY KEY," +
                     "value TEXT NOT NULL" +
                     ");");
+
+            stmt.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('db_version', '0');");
 
             stmt.execute("CREATE TABLE IF NOT EXISTS docente (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT," +
@@ -73,26 +80,68 @@ public class Database {
                     "FOREIGN KEY (id_estudante) REFERENCES estudante(id)" +
                     ");");
 
-            stmt.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('db_version', '0');");
-
-            System.out.println("Base de dados criada e inicializada com sucesso!");
+            System.out.println("[BD] Base de dados inicializada em: " + dbPath);
 
         } catch (SQLException e) {
-            System.err.println("Erro ao inicializar BD: " + e.getMessage());
+            System.err.println("[BD] Erro ao inicializar BD: " + e.getMessage());
         } finally {
-            try {
-                if (stmt != null)
-                    stmt.close();
-            } catch (SQLException e) {
-                System.err.println("Erro ao fechar Statement: " + e.getMessage());
-            }
+            try { if (stmt != null) stmt.close(); } catch (SQLException ignored) {}
+            try { if (conn != null) conn.close(); } catch (SQLException ignored) {}
+        }
+    }
 
-            try {
-                if (conn != null)
-                    conn.close();
-            } catch (SQLException e) {
-                System.err.println("Erro ao fechar Connection: " + e.getMessage());
-            }
+    // -------- Versionamento --------
+
+    public static int getVersion() {
+        try (Connection conn = DriverManager.getConnection(url());
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(
+                     "SELECT value FROM config WHERE key='db_version'")) {
+
+            if (rs.next())
+                return Integer.parseInt(rs.getString("value"));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 0;
+    }
+
+    public static void setVersion(int newVersion) {
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE config SET value=? WHERE key='db_version'"
+             )) {
+
+            ps.setString(1, String.valueOf(newVersion));
+            ps.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // -------- Execução de queries (principal / secundário) --------
+
+    // Usado pelo servidor principal quando um cliente faz uma operação
+    public static void executeLocalUpdate(String sql) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(url());
+             Statement stmt = conn.createStatement()) {
+
+            stmt.executeUpdate(sql);
+
+            int v = getVersion() + 1;
+            setVersion(v);
+        }
+    }
+
+    // Usado pelos servidores secundários ao receber HBUPDATE com SQL
+    public static void applyRemoteUpdate(String sql, int newVersion) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(url());
+             Statement stmt = conn.createStatement()) {
+
+            stmt.executeUpdate(sql);
+            setVersion(newVersion);
         }
     }
 }
