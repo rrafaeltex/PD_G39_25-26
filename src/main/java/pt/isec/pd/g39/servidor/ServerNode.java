@@ -1,13 +1,16 @@
 package pt.isec.pd.g39.servidor;
 
 import com.google.gson.Gson;
+import pt.isec.pd.g39.servidor.database.Database;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.Map;
 
 public class ServerNode {
@@ -36,6 +39,18 @@ public class ServerNode {
 
     public void start() throws IOException {
 
+        String dbFile = trataDatabaseFile(dbFolder);
+        Database.configure(dbFile);
+
+        try{
+            Database.initializeIfNeeded();
+        }catch (SQLException e){
+            System.err.println("Erro ao inicializar a base de dados: " + e.getMessage());
+            return;
+        }
+
+        System.out.println("Base de dados utilizada: " + dbFile);
+
         intializeServerSockets();
 
         try {
@@ -59,6 +74,30 @@ public class ServerNode {
 
         peerServerSocket = new ServerSocket(0);
         peerPort = peerServerSocket.getLocalPort();
+    }
+
+    private String trataDatabaseFile(String dbFolder){
+
+        File folder = new File(dbFolder);
+
+        if(!folder.exists()){
+            folder.mkdirs();
+        }
+
+        File[] dbFiles = folder.listFiles((dir, name) -> name.endsWith(".db"));
+
+        if(dbFiles == null || dbFiles.length == 0){
+            return dbFolder + File.separator + "server_v0.db";
+        }
+
+        File newest = dbFiles[0];
+        for(File f : dbFiles){
+            if(f.lastModified() > newest.lastModified()){
+                newest = f;
+            }
+        }
+
+        return newest.getAbsolutePath();
     }
 
     public void register(String directoryIp, int directoryPort, int clientPort, int peerPort) throws IOException {

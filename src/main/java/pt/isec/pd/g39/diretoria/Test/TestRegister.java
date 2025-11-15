@@ -1,4 +1,4 @@
-package pt.isec.pd.g39.diretoria;
+package pt.isec.pd.g39.diretoria.Test;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;

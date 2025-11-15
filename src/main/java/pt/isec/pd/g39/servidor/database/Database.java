@@ -1,5 +1,6 @@
 package pt.isec.pd.g39.servidor.database;
 
+import java.io.File;
 import java.sql.*;
 
 public class Database {
@@ -7,8 +8,8 @@ public class Database {
     private static String dbPath;
 
     // Chamada no arranque do servidor com o diretório da BD
-    public static void configure(String dbFolder) {
-        dbPath = dbFolder + "/server.db";
+    public static void configure(String dbFilePath) {
+        dbPath = dbFilePath;
     }
 
     private static String url() {
@@ -16,78 +17,96 @@ public class Database {
     }
 
     // Inicializa BD: cria tabelas se não existirem e garante db_version
-    public static void init() {
-        Connection conn = null;
-        Statement stmt = null;
+    public static void initializeIfNeeded() throws SQLException {
+        File f = new File(dbPath);
+        boolean createNew = !f.exists();
 
-        try {
-            conn = DriverManager.getConnection(url());
-            stmt = conn.createStatement();
+        try (Connection conn = DriverManager.getConnection(url());
+             Statement stmt = conn.createStatement()) {
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS config (" +
-                    "key TEXT PRIMARY KEY," +
-                    "value TEXT NOT NULL" +
-                    ");");
+            if (createNew) {
+                System.out.println("Criar nova base de dados → versão 0");
 
-            stmt.execute("INSERT OR IGNORE INTO config (key, value) VALUES ('db_version', '0');");
+                stmt.execute("""
+                    CREATE TABLE IF NOT EXISTS config (
+                        key TEXT PRIMARY KEY,
+                        value TEXT NOT NULL
+                    )
+                """);
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS docente (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "nome TEXT NOT NULL," +
-                    "email TEXT NOT NULL UNIQUE," +
-                    "pass_hash TEXT NOT NULL," +
-                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP" +
-                    ");");
+                stmt.execute("INSERT INTO config (key, value) VALUES ('db_version', '0');");
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS estudante (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "numero INTEGER NOT NULL UNIQUE," +
-                    "nome TEXT NOT NULL," +
-                    "email TEXT NOT NULL UNIQUE," +
-                    "pass_hash TEXT NOT NULL," +
-                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP" +
-                    ");");
+                createSchema(stmt);
 
-            stmt.execute("CREATE TABLE IF NOT EXISTS pergunta (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "id_docente INTEGER NOT NULL," +
-                    "enunciado TEXT NOT NULL," +
-                    "inicio DATETIME NOT NULL," +
-                    "fim DATETIME NOT NULL," +
-                    "codigo_acesso TEXT NOT NULL UNIQUE," +
-                    "correta CHAR(1) NOT NULL," +
-                    "created_at DATETIME DEFAULT CURRENT_TIMESTAMP," +
-                    "FOREIGN KEY (id_docente) REFERENCES docente(id)" +
-                    ");");
-
-            stmt.execute("CREATE TABLE IF NOT EXISTS opcao (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "id_pergunta INTEGER NOT NULL," +
-                    "letra CHAR(1) NOT NULL," +
-                    "texto TEXT NOT NULL," +
-                    "UNIQUE(id_pergunta, letra)," +
-                    "FOREIGN KEY (id_pergunta) REFERENCES pergunta(id)" +
-                    ");");
-
-            stmt.execute("CREATE TABLE IF NOT EXISTS resposta (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
-                    "id_pergunta INTEGER NOT NULL," +
-                    "id_estudante INTEGER NOT NULL," +
-                    "letra CHAR(1) NOT NULL," +
-                    "responded_at DATETIME DEFAULT CURRENT_TIMESTAMP," +
-                    "UNIQUE(id_pergunta, id_estudante)," +
-                    "FOREIGN KEY (id_pergunta) REFERENCES pergunta(id)," +
-                    "FOREIGN KEY (id_estudante) REFERENCES estudante(id)" +
-                    ");");
-
-            System.out.println("[BD] Base de dados inicializada em: " + dbPath);
-
-        } catch (SQLException e) {
-            System.err.println("[BD] Erro ao inicializar BD: " + e.getMessage());
-        } finally {
-            try { if (stmt != null) stmt.close(); } catch (SQLException ignored) {}
-            try { if (conn != null) conn.close(); } catch (SQLException ignored) {}
+            } else {
+                System.out.println("Usar base de dados existente: " + dbPath);
+            }
         }
+    }
+
+    /**
+     * Cria o schema base exigido pelo enunciado.
+     * Adapta as tabelas conforme o modelo ER do enunciado.
+     */
+    private static void createSchema(Statement stmt) throws SQLException {
+
+        // DOCENTE
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS docente (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            );
+        """);
+
+        // ESTUDANTE
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS estudante (
+                numero INTEGER PRIMARY KEY,
+                nome TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL
+            );
+        """);
+
+        // PERGUNTA
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS pergunta (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                docente_id INTEGER NOT NULL,
+                enunciado TEXT NOT NULL,
+                data_inicio TEXT NOT NULL,
+                data_fim TEXT NOT NULL,
+                codigo_acesso TEXT NOT NULL UNIQUE,
+                FOREIGN KEY (docente_id) REFERENCES docente(id)
+            );
+        """);
+
+        // OPÇÃO
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS opcao (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pergunta_id INTEGER NOT NULL,
+                letra TEXT NOT NULL,
+                texto TEXT NOT NULL,
+                correta BOOLEAN NOT NULL,
+                FOREIGN KEY (pergunta_id) REFERENCES pergunta(id)
+            );
+        """);
+
+        // RESPOSTA
+        stmt.execute("""
+            CREATE TABLE IF NOT EXISTS resposta (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                estudante_numero INTEGER NOT NULL,
+                pergunta_id INTEGER NOT NULL,
+                opcao_escolhida TEXT NOT NULL,
+                data_resposta TEXT NOT NULL,
+                FOREIGN KEY (estudante_numero) REFERENCES estudante(numero),
+                FOREIGN KEY (pergunta_id) REFERENCES pergunta(id)
+            );
+        """);
     }
 
     // -------- Versionamento --------
