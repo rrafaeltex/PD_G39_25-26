@@ -16,6 +16,9 @@ public class DirecaoServerList {
         }
 
         ServidorInfo s = new ServidorInfo(ip, tcpClients, tcpPeers);
+        if(servidores.isEmpty()){
+            s.isPrimary = true;
+        }
         servidores.add(s);
         System.out.println("Servidor registado: " + s);
     }
@@ -23,6 +26,7 @@ public class DirecaoServerList {
 
     public synchronized void unregister(InetAddress ip, int tcpClients) {
         servidores.removeIf(s -> s.ip.equals(ip) && s.tcpPortClients == tcpClients);
+        if(servidores.get(0).isPrimary == false){servidores.get(0).isPrimary = true;}
         System.out.println(" Servidor removido: " + ip.getHostAddress() + ":" + tcpClients);
     }
 

@@ -23,6 +23,11 @@ public class UDPReceiver extends Thread {
 
             byte[] buffer = new byte[1024];
 
+            /*
+            Gere uma lista de servidores ativos, ordenada pela ordem de registo no serviço de
+            diretoria, e aguarda continuamente pela receção de datagramas enviados por clientes
+            e servidores, num porto de escuta UDP passado na linha de comando.
+            */
             while (true) {
                 try {
                     DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
@@ -33,6 +38,11 @@ public class UDPReceiver extends Thread {
 
                 } catch (SocketTimeoutException e) {
                     direcao.removeDeadServers();
+                    /*
+                    Os dados relativos a um servidor são eliminados da lista se não for recebido qualquer
+                    heartbeat emitido por este ao fim de 17 segundos (valor fixo/hardcoded), mesmo que
+                    se seja o servidor principal atual, ou seja, o primeiro da lista/mais antigo.
+                     */
                 }
             }
         } catch (Exception e) {
@@ -86,7 +96,8 @@ public class UDPReceiver extends Thread {
 
             boolean ok = direcao.updateHeartbeat(packet.getAddress(), tcpClients);
             if (!ok) {
-                // ignorar heartbeat de servidor não registado
+                // Quando recebe um heartbeat de um servidor que ainda não consta da lista ordenada
+                // de servidores ativos, ignora-o (servidor não registado).
                 return;
             }
 
@@ -109,7 +120,11 @@ public class UDPReceiver extends Thread {
         // ------------------------------------------
         if ("GET_PRIMARY".equals(type)) {
             ServidorInfo principal = direcao.getPrincipal();
-
+            /*
+            Em resposta a um pedido de um cliente, fornece os dados (endereço IP e porto TCP
+            de escuta para aceitação de pedidos de conexão de clientes) do servidor ativo
+            registado há mais tempo, ou seja, do primeiro da lista.
+             */
             String reply = (principal == null)
                     ? gson.toJson(Map.of("type", "NO_SERVER"))
                     : gson.toJson(Map.of(
