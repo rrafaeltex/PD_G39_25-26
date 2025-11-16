@@ -2,10 +2,10 @@ package pt.isec.pd.g39.servidor;
 
 
 public class MainServer {
-    public void main(String[] args) throws Exception {
+    public static void main(String[] args) throws Exception {
 
         if (args.length != 4) {
-            System.out.println("Uso: java pd.server.ServerMain <dirIp> <dirPort> <dbFolder> <multicastLocalIp>");
+            System.out.println("Uso: java pt.isec.pd.g39.servidor.MainServer <dirIp> <dirPort> <dbFolder> <multicastLocalIp>");
             System.exit(1);
         }
 

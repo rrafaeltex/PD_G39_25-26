@@ -21,6 +21,7 @@ public class DirecaoServerList {
         }
         servidores.add(s);
         System.out.println("Servidor registado: " + s);
+
     }
 
 
@@ -48,9 +49,38 @@ public class DirecaoServerList {
     public synchronized void removeDeadServers() {
         long now = System.currentTimeMillis();
         servidores.removeIf(s -> now - s.lastHeartbeat > 17000);
+        if(!servidores.isEmpty()){
+            servidores.get(0).isPrimary = true;
+        }
+
     }
 
     public synchronized List<ServidorInfo> getServidores() {
         return new ArrayList<>(servidores);
+    }
+
+    // Imprime todos os dados atuais dos servidores registados
+    public synchronized void imprimirServidores() {
+        if (servidores.isEmpty()) {
+            System.out.println("[Direcao] Nao existem servidores registados.");
+            return;
+        }
+        System.out.println("[Direcao] ===== Lista de Servidores (" + servidores.size() + ") =====");
+        long now = System.currentTimeMillis();
+        int idx = 1;
+        for (ServidorInfo s : servidores) {
+            long agoMs = now - s.lastHeartbeat;
+            System.out.printf(
+                    Locale.ROOT,
+                    "%d) IP=%s | TCP_Clients=%d | TCP_Peers=%d | Primary=%s | Heartbeat=%d ms atras%n",
+                    idx++,
+                    s.ip.getHostAddress(),
+                    s.tcpPortClients,
+                    s.tcpPortPeers,
+                    s.isPrimary,
+                    agoMs
+            );
+        }
+        System.out.println("[Direcao] =====================================");
     }
 }

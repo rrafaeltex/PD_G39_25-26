@@ -5,22 +5,23 @@ import pt.isec.pd.g39.servidor.database.Database;
 
 import java.io.File;
 import java.io.IOException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.ServerSocket;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Map;
 
 public class ServerNode {
+
     private final String directoryIp;
     private final int directoryPort;
     private final String dbFolder;
     private final String multicastLocalIp;
-    private final Gson gson= new Gson();
-    private boolean isPrimary = false;
-    private  int clientPort;
+
+    private final Gson gson = new Gson();
+
+    private static volatile boolean isPrimary = false;
+
+    private int clientPort;
     private int peerPort;
 
     private String primaryIp;
@@ -28,7 +29,7 @@ public class ServerNode {
     private int primaryTcpPeers;
 
     private ServerSocket clientServerSocket;
-    private ServerSocket peerServerSocket;
+    private static ServerSocket peerServerSocket;
 
     public ServerNode(String directoryIp, int directoryPort, String dbFolder, String multicastLocalIp) {
         this.directoryIp = directoryIp;
@@ -37,38 +38,81 @@ public class ServerNode {
         this.multicastLocalIp = multicastLocalIp;
     }
 
+    public static boolean isPrimary() {
+        return isPrimary;
+    }
+
+    public static synchronized void becomePrimary() {
+        if (!isPrimary) {
+            isPrimary = true;
+            System.out.println("🌟 Agora sou o servidor PRINCIPAL!");
+
+            // Iniciar o servidor de peers (se ainda não estiver a correr)
+            DatabaseSync.startPeerServer(peerServerSocket);
+
+            // Notificar os clientes se necessário (opcional aqui)
+        }
+    }
+
     public void start() throws IOException {
 
-        String dbFile = trataDatabaseFile(dbFolder);
-        Database.configure(dbFile);
-
-        try{
-            Database.initializeIfNeeded();
-        }catch (SQLException e){
-            System.err.println("Erro ao inicializar a base de dados: " + e.getMessage());
-            return;
-        }
-
-        System.out.println("Base de dados utilizada: " + dbFile);
-
-        intializeServerSockets();
+        initializeServerSockets();
 
         try {
             register(directoryIp, directoryPort, clientPort, peerPort);
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("[ERRO] Falha no registo: " + e.getMessage());
+            return;
         }
 
-        if(isPrimary){
-            //Thread primaryServer
-        }else{
-            //sincronizar base de dados
-            //Thread peerServer
+        if (isPrimary) {
+
+            String dbFile = DatabaseManager.trataDatabaseFile(dbFolder);
+            Database.configure(dbFile);
+
+            try {
+                Database.initializeIfNeeded();
+            } catch (SQLException e) {
+                System.err.println("Erro ao inicializar BD: " + e.getMessage());
+                return;
+            }
+
+            System.out.println("Servidor principal com BD: " + dbFile);
+
+            DatabaseSync.startPeerServer(peerServerSocket);
+
+        } else {
+
+            System.out.println("Sou secundário — sincronizando BD via TCP...");
+
+            boolean ok = DatabaseSync.downloadDatabase(primaryIp, primaryTcpPeers, dbFolder);
+
+            if (!ok) {
+                System.err.println("Falha ao sincronizar BD. Informando diretoria...");
+                informarDiretoriaFalha();
+                return;
+            }
+
+            System.out.println("BD sincronizada com sucesso.");
+        }
+
+        // Sempre ativo em ambos os servidores
+        ClientServer.start(clientServerSocket);
+
+        // --------------------------
+        // Iniciar mecanismo de HEARTBEAT
+        // --------------------------
+        try {
+            String myIp = InetAddress.getLocalHost().getHostAddress();
+            HeartbeatManager.init(directoryIp, directoryPort, myIp, clientPort, peerPort);
+            HeartbeatManager.start();
+        } catch (Exception e) {
+            System.err.println("[HB] Erro ao iniciar HeartbeatManager: " + e.getMessage());
         }
     }
 
 
-    private void intializeServerSockets() throws IOException {
+    private void initializeServerSockets() throws IOException {
         clientServerSocket = new ServerSocket(0);
         clientPort = clientServerSocket.getLocalPort();
 
@@ -76,84 +120,86 @@ public class ServerNode {
         peerPort = peerServerSocket.getLocalPort();
     }
 
-    private String trataDatabaseFile(String dbFolder){
-
-        File folder = new File(dbFolder);
-
-        if(!folder.exists()){
-            folder.mkdirs();
-        }
-
-        File[] dbFiles = folder.listFiles((dir, name) -> name.endsWith(".db"));
-
-        if(dbFiles == null || dbFiles.length == 0){
-            return dbFolder + File.separator + "server_v0.db";
-        }
-
-        File newest = dbFiles[0];
-        for(File f : dbFiles){
-            if(f.lastModified() > newest.lastModified()){
-                newest = f;
-            }
-        }
-
-        return newest.getAbsolutePath();
-    }
 
     public void register(String directoryIp, int directoryPort, int clientPort, int peerPort) throws IOException {
-        try(DatagramSocket socket = new DatagramSocket()){
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+
             socket.setSoTimeout(5000);
 
             String msg = gson.toJson(Map.of(
                     "type", "REGISTER_SERVER",
-                    "primary_tcp_clients", clientPort,
-                    "primary_tcp_peers", peerPort
-
+                    "tcp_clients", clientPort,
+                    "tcp_peers", peerPort
             ));
 
-            System.out.println("A enviar registo...");
+            byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+            InetAddress addr = InetAddress.getByName(directoryIp);
 
-            byte[] data = msg.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            InetAddress address = InetAddress.getByName(directoryIp);
-            DatagramPacket packet = new DatagramPacket(data, data.length, address, directoryPort);
+            DatagramPacket packet = new DatagramPacket(data, data.length, addr, directoryPort);
             socket.send(packet);
-
 
             byte[] buffer = new byte[1024];
             DatagramPacket resposta = new DatagramPacket(buffer, buffer.length);
             socket.receive(resposta);
 
-            String respostaMsg = new String(resposta.getData(), 0, resposta.getLength(), StandardCharsets.UTF_8
-            );
+            String respostaMsg = new String(resposta.getData(), 0, resposta.getLength(), StandardCharsets.UTF_8);
 
             var json = gson.fromJson(respostaMsg, Map.class);
 
-            if("REGISTERED".equals(json.get("type"))){
+            if ("REGISTERED".equals(json.get("type"))) {
+
                 primaryIp = (String) json.get("primary_ip");
-                primaryTcpClients = (int) json.get("primary_tcp_clients");
-                primaryTcpPeers = (int) json.get("primary_tcp_peers");
+                primaryTcpClients = ((Double) json.get("primary_tcp_clients")).intValue();
+                primaryTcpPeers = ((Double) json.get("primary_tcp_peers")).intValue();
 
                 InetAddress myIp = InetAddress.getLocalHost();
-                isPrimary = primaryIp.equals(myIp.getHostAddress()) && primaryTcpClients == clientPort;
 
-                if(isPrimary){
-                    System.out.println("Registado como servidor principal");
-                } else{
-                    System.out.println("Registado como servidor secundario backup");
+                if (primaryIp.equals(myIp.getHostAddress()) && primaryTcpClients == clientPort) {
+                    becomePrimary();
+                } else {
+                    isPrimary = false;
                 }
 
-                System.out.println("Registo feito com sucesso: ");
+
+                System.out.println(isPrimary ?
+                        "Registado como servidor PRINCIPAL" :
+                        "Registado como servidor SECUNDÁRIO");
+
+                return;
             }
-            throw new IOException("Resposta inesperada da diretoria: "+(String)json.get("type"));
-            //Um servidor, que não receba qualquer resposta do serviço de diretoria durante a fase
-            //de arranque, termina. >>> Se não for do tipo "REGISTERED" a resposta conta como não
-            //ter obtido resposta, então termina.
+
+            throw new IOException("Resposta inesperada da diretoria: " + json.get("type"));
+
         } catch (Exception e) {
-            throw new IOException("Erro ao registar no diretoria: "+e.getMessage());
+            throw new IOException("Erro ao registar no diretoria: " + e.getMessage());
         }
-
-
-
-
     }
+
+
+    private void informarDiretoriaFalha() {
+
+        try (DatagramSocket socket = new DatagramSocket()) {
+
+            String msg = gson.toJson(Map.of(
+                    "type", "SERVER_FAIL",
+                    "server_ip", InetAddress.getLocalHost().getHostAddress(),
+                    "reason", "sync_failed"
+            ));
+
+            byte[] data = msg.getBytes(StandardCharsets.UTF_8);
+
+            DatagramPacket packet = new DatagramPacket(
+                    data, data.length,
+                    InetAddress.getByName(directoryIp), directoryPort
+            );
+
+            socket.send(packet);
+
+        } catch (Exception e) {
+            System.err.println("[ERRO] Falha ao informar diretoria: " + e.getMessage());
+        }
+    }
+
+
 }

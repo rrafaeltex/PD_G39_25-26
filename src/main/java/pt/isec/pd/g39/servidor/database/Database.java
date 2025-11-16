@@ -163,4 +163,8 @@ public class Database {
             setVersion(newVersion);
         }
     }
+
+    public static String getPath() {
+        return dbPath;
+    }
 }
