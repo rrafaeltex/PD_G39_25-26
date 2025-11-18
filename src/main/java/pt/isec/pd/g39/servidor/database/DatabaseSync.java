@@ -1,6 +1,4 @@
-package pt.isec.pd.g39.servidor;
-
-import pt.isec.pd.g39.servidor.database.Database;
+package pt.isec.pd.g39.servidor.database;
 
 import java.io.File;
 import java.net.InetAddress;

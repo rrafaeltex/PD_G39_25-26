@@ -15,14 +15,12 @@ public class HeartbeatManager {
 
     private static final Gson gson = new Gson();
 
-    // infos fixas deste servidor
     private static String directoryIp;
     private static int directoryPort;
     private static String localIp;
     private static int clientPort;
     private static int peerPort;
 
-    // qual é o principal atual (dado pela diretoria)
     private static volatile String primaryIp;
     private static volatile int primaryTcpClients;
 
@@ -56,8 +54,6 @@ public class HeartbeatManager {
             System.err.println("[HB] Erro ao enviar heartbeat com SQL: " + e.getMessage());
         }
     }
-
-    // ===================== SENDER ======================
 
     private static void heartbeatLoop() {
         while (true) {
@@ -116,7 +112,6 @@ public class HeartbeatManager {
 
                 System.out.println("[HB] Principal atual: " + primaryIp + ":" + primaryTcpClients);
 
-                // 👉 AQUI é que decidimos se este servidor passou a ser o principal
                 boolean isNowPrimary =
                         localIp.equals(primaryIp) &&
                                 clientPort == primaryTcpClients;
@@ -141,7 +136,7 @@ public class HeartbeatManager {
         heartbeat.put("client_port", clientPort);
         heartbeat.put("peer_port", peerPort);
 
-        if (sql != null)                       // Só envia SQL se houver
+        if (sql != null)
             heartbeat.put("sql", sql);
 
         String msg = gson.toJson(heartbeat);
@@ -156,7 +151,6 @@ public class HeartbeatManager {
         }
     }
 
-    // ===================== RECEIVER ======================
 
     private static void multicastReceiverLoop() {
         try (MulticastSocket mcast = new MulticastSocket(MULTICAST_PORT)) {
@@ -202,14 +196,13 @@ public class HeartbeatManager {
                     senderIp.equals(primaryIp) &&
                             senderClientPort == primaryTcpClients;
 
-            // 👉 Novo código aqui:
             boolean isNowPrimary =
                     localIp.equals(primaryIp) &&
                             clientPort == primaryTcpClients;
 
             if (isNowPrimary && !ServerNode.isPrimary()) {
                 System.out.println("[HB] Este servidor tornou-se o novo PRINCIPAL!");
-                ServerNode.becomePrimary();   // Ativar peerServer etc.
+                ServerNode.becomePrimary();
             }
 
             if (!isPrimaryHeartbeat)
@@ -231,7 +224,6 @@ public class HeartbeatManager {
                     System.exit(1);
                 }
 
-                // aplicar SQL remota
                 System.out.println("[HB-RECV] A aplicar SQL do principal via heartbeat.");
                 Database.applyRemoteUpdate(sql, remoteVersion);
             }

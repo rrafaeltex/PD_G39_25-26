@@ -15,8 +15,8 @@ import com.google.gson.Gson;
 public class ClientHandler extends Thread {
 
     private final Socket socket;
-    private PrintWriter out; //falar com o cliente
-    private BufferedReader in; // escutar o cliente
+    private PrintWriter out;
+    private BufferedReader in;
     private final Gson gson = new Gson();
 
     public ClientHandler(Socket socket) {

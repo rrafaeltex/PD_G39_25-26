@@ -2,8 +2,9 @@ package pt.isec.pd.g39.servidor;
 
 import com.google.gson.Gson;
 import pt.isec.pd.g39.servidor.database.Database;
+import pt.isec.pd.g39.servidor.database.DatabaseManager;
+import pt.isec.pd.g39.servidor.database.DatabaseSync;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -47,14 +48,14 @@ public class ServerNode {
             isPrimary = true;
             System.out.println("🌟 Agora sou o servidor PRINCIPAL!");
 
-            // Iniciar o servidor de peers (se ainda não estiver a correr)
+
             DatabaseSync.startPeerServer(peerServerSocket);
 
             // Notificar os clientes se necessário (opcional aqui)
         }
     }
 
-    public void start() throws IOException {
+    public void  start() throws IOException {
 
         initializeServerSockets();
 
@@ -96,12 +97,9 @@ public class ServerNode {
             System.out.println("BD sincronizada com sucesso.");
         }
 
-        // Sempre ativo em ambos os servidores
+
         ClientServer.start(clientServerSocket);
 
-        // --------------------------
-        // Iniciar mecanismo de HEARTBEAT
-        // --------------------------
         try {
             String myIp = InetAddress.getLocalHost().getHostAddress();
             HeartbeatManager.init(directoryIp, directoryPort, myIp, clientPort, peerPort);
@@ -200,6 +198,5 @@ public class ServerNode {
             System.err.println("[ERRO] Falha ao informar diretoria: " + e.getMessage());
         }
     }
-
 
 }

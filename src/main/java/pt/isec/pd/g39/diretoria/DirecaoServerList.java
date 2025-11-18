@@ -1,6 +1,9 @@
 package pt.isec.pd.g39.diretoria;
 
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class DirecaoServerList {
@@ -46,6 +49,7 @@ public class DirecaoServerList {
         return false;
     }
 
+
     public synchronized void removeDeadServers() {
         long now = System.currentTimeMillis();
         servidores.removeIf(s -> now - s.lastHeartbeat > 17000);
@@ -59,7 +63,6 @@ public class DirecaoServerList {
         return new ArrayList<>(servidores);
     }
 
-    // Imprime todos os dados atuais dos servidores registados
     public synchronized void imprimirServidores() {
         if (servidores.isEmpty()) {
             System.out.println("[Direcao] Nao existem servidores registados.");

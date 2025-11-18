@@ -1,4 +1,4 @@
-package pt.isec.pd.g39.servidor;
+package pt.isec.pd.g39.servidor.database;
 
 import java.io.File;
 

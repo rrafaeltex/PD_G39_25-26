@@ -35,7 +35,6 @@ public class UDPReceiver extends Thread {
                     String msg = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
 
                     processMessage(socket, packet, msg);
-
                 } catch (SocketTimeoutException e) {
                     direcao.removeDeadServers();
                     /*
@@ -48,15 +47,12 @@ public class UDPReceiver extends Thread {
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
+        }
 
     private void processMessage(DatagramSocket socket, DatagramPacket packet, String msg) throws Exception {
         var json = gson.fromJson(msg, java.util.Map.class);
         String type = (String) json.get("type");
 
-        // ------------------------------------------
-        // REGISTAR SERVIDOR
-        // ------------------------------------------
         if ("REGISTER_SERVER".equals(type)) {
             int tcpClients = ((Double) json.get("tcp_clients")).intValue();
             int tcpPeers = ((Double) json.get("tcp_peers")).intValue();
@@ -79,18 +75,14 @@ public class UDPReceiver extends Thread {
             return;
         }
 
-        // ------------------------------------------
-        // UNREGISTER
-        // ------------------------------------------
+
         if ("UNREGISTER".equals(type)) {
             int tcpClients = ((Double) json.get("tcp_clients")).intValue();
             direcao.unregister(packet.getAddress(), tcpClients);
             return;
         }
 
-        // ------------------------------------------
-        // HEARTBEAT
-        // ------------------------------------------
+
         if ("HEARTBEAT".equals(type)) {
             int tcpClients = ((Double) json.get("tcp_clients")).intValue();
 

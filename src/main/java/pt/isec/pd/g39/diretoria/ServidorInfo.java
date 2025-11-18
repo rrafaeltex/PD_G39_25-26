@@ -6,7 +6,7 @@ public class ServidorInfo {
     public InetAddress ip;
     public int tcpPortClients;
     public int tcpPortPeers;
-    public long lastHeartbeat; // timestamp da última atualização
+    public long lastHeartbeat;
     public boolean isPrimary = false;
 
     public ServidorInfo(InetAddress ip, int tcpPortClients, int tcpPortPeers) {
