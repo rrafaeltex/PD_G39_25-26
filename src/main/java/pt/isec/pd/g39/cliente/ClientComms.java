@@ -20,7 +20,7 @@ public class ClientComms {
     private int tcpPortServer;
 
     private final Gson gson = new Gson();
-    private static final long LOGIN_WINDOW_MS = 30_000L;
+    private static final long LOGIN_TIME = 30_000L;
 
     public ClientComms(String directoryIp, int directoryPort) {
         this.directoryIp = directoryIp;
@@ -29,16 +29,11 @@ public class ClientComms {
 
     public void start() throws IOException {
         getTCP();
-        /*
-        Depois, começam por solicitar o email e a password ao utilizador para efeitos de
-        autenticação, ou o conjunto de dados necessários ao registo de um novo utilizador.
-         */
         boolean done = false;
         Scanner scanner = new Scanner(System.in);
         while (!done) {
             System.out.println("Registo ou Login?");
             String choice = scanner.nextLine().trim().toLowerCase();
-
         /*
         Depois, começam por solicitar o email e a password ao utilizador para efeitos de
         autenticação, ou o conjunto de dados necessários ao registo de um novo utilizador. Posteriomente,
@@ -120,89 +115,142 @@ public class ClientComms {
         }
     }
 
-    private void runLoginSession(Scanner scanner) {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(ipServer, tcpPortServer), 5000);
-            socket.setSoTimeout(30_000);
-            /*
-            Quando a autenticação falha ou as credenciais não são enviadas no espaço de 30
-            segundos, o servidor encerra a ligação TCP com o cliente.
-             */
+    private Socket connectToCurrentServer() throws IOException {
+        Socket socket = new Socket();
+        socket.connect(new InetSocketAddress(ipServer, tcpPortServer), 5000);
+        socket.setSoTimeout(30_000);
+        return socket;
+    }
 
-            try (BufferedWriter out = new BufferedWriter(
-                    new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+    private void runLoginSession(Scanner scanner) {
+        String lastEmail;
+        String lastPassword;
+
+        System.out.print("Email: ");
+        lastEmail = scanner.nextLine().trim();
+        System.out.print("Password: ");
+        lastPassword = scanner.nextLine().trim();
+
+        long deadlineMs = System.currentTimeMillis() + LOGIN_TIME;
+        boolean retriedAfterSame = false;
+
+        while (System.currentTimeMillis() <= deadlineMs) {
+            try (Socket socket = connectToCurrentServer();
+                 BufferedWriter out = new BufferedWriter(
+                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
                  BufferedReader in = new BufferedReader(
                          new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
 
-                long deadlineMs = 0L;
-                boolean firstAttempt = true;
+                String msg = gson.toJson(Map.of(
+                        "type", "LOGIN",
+                        "email", lastEmail,
+                        "password", lastPassword
+                ));
+                out.write(msg);
+                out.write("\n");
+                out.flush();
 
-                while (true) {
+                String reply = in.readLine();
+                if (reply == null || reply.isBlank()) {
+                    throw new IOException("Ligação encerrada pelo servidor.");
+                }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> json = gson.fromJson(reply, Map.class);
+                String type = (String) json.get("type");
+                String message = (String) json.getOrDefault("message", "");
+
+                if ("LOGIN_OK".equals(type)) {
+                    System.out.println("Login bem-sucedido!");
+                    return;
+                } else if ("LOGIN_FAIL".equals(type)) {
+                    long remainingSec = Math.max(0, (deadlineMs - System.currentTimeMillis()) / 1000);
+                    if (remainingSec <= 0) {
+                        System.out.println("Janela de 30s expirada.");
+                        break;
+                    }
+                    System.out.println("Falha no login: " + message + " | Tente novamente (" + remainingSec + "s restantes)");
                     System.out.print("Email: ");
-                    String email = scanner.nextLine().trim();
+                    lastEmail = scanner.nextLine().trim();
                     System.out.print("Password: ");
-                    String password = scanner.nextLine().trim();
+                    lastPassword = scanner.nextLine().trim();
+                } else {
+                    System.out.println("Resposta inesperada do servidor: " + type);
+                    return;
+                }
 
-                    String msg = gson.toJson(Map.of(
-                            "type", "LOGIN",
-                            "email", email,
-                            "password", password
-                    ));
-
-                    out.write(msg);
-                    out.write("\n");
-                    out.flush();
-
-                    if (firstAttempt) {
-                        deadlineMs = System.currentTimeMillis() + LOGIN_WINDOW_MS;
-                        firstAttempt = false;
-                    }
-
-                    String reply;
-                    try {
-                        reply = in.readLine();
-                    } catch (SocketTimeoutException e) {
-                        System.err.println("Timeout à espera de resposta. Servidor pode ter encerrado.");
-                        break;
-                    }
-
-                    if (reply == null || reply.isBlank()) {
-                        System.out.println("Ligação encerrada pelo servidor.");
-                        break;
-                    }
-
-                    @SuppressWarnings("unchecked")
-                    Map<String, Object> json = gson.fromJson(reply, Map.class);
-                    String type = (String) json.get("type");
-                    String message = (String) json.getOrDefault("message", "");
-
-                    if ("LOGIN_OK".equals(type)) {
-                        System.out.println("Login bem-sucedido!");
-                        break;
-                    } else if ("LOGIN_FAIL".equals(type)) {
-                        long remainingSec = Math.max(0, (deadlineMs - System.currentTimeMillis()) / 1000);
-                        if (remainingSec <= 0) {
-                            System.out.println("Janela de 30s expirada.");
-                            break;
-                        }
-                        System.out.println("Falha no login: " + message + " | Tente novamente (" + remainingSec + "s restantes)");
-                    } else {
-                        System.out.println("Resposta inesperada do servidor: " + type);
-                    }
+            } catch (SocketTimeoutException e) {
+                System.err.println("Timeout à espera de resposta. Servidor pode ter encerrado.");
+                if (!attemptRecoveryLogin(deadlineMs, retriedAfterSame)) {
+                    System.exit(1);
+                } else {
+                    retriedAfterSame = true;
+                }
+            } catch (IOException e) {
+                System.err.println("Erro na comunicação TCP: " + e.getMessage());
+                if (!attemptRecoveryLogin(deadlineMs, retriedAfterSame)) {
+                    System.exit(1);
+                } else {
+                    retriedAfterSame = true;
                 }
             }
+        }
+
+        System.out.println("Não foi possível completar o login. A terminar.");
+        System.exit(1);
+    }
+
+    private boolean attemptRecoveryLogin(long deadlineMs, boolean alreadyWaitedOnce) {
+        /*
+        Quando a conexão TCP com o servidor atual deixa de estar operacional, a aplicação
+        cliente volta a solicitar ao serviço de diretoria os dados sobre o servidor principal atual.
+        Se for diferente do anterior (que deixou de estar acessível), volta a ligar-se e a
+        autenticar-se, sem envolver o utilizador e tentando passar esta situação de
+        recuperação de falha o mais despercebida possível. Se os dados corresponderem ao
+        mesmo servidor, volta a tentar uma segunda vez 20 segundos depois. Caso a operação
+        não seja bem-sucedida, a aplicação termina.
+        */
+        String previousIp = ipServer;
+        int previousPort = tcpPortServer;
+        try {
+            getTCP();
         } catch (IOException e) {
-            System.err.println("Erro na comunicação TCP: " + e.getMessage());
+            System.err.println("Erro ao contactar diretoria durante recuperação: " + e.getMessage());
+            return false;
+        }
+
+        boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
+        if (changed) {
+            System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reconectar automaticamente.");
+            return true;
+        } else {
+            if (alreadyWaitedOnce) {
+                System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
+                return false;
+            }
+            System.out.println("Mesmo servidor principal; aguardar 20s e tentar novamente...");
+            try {
+                long remaining = Math.max(0, deadlineMs - System.currentTimeMillis());
+                long wait = Math.min(20_000L, remaining);
+                if (wait <= 0) {
+                    System.out.println("Janela de login expirada durante espera.");
+                    return false;
+                }
+                Thread.sleep(wait);
+            } catch (InterruptedException ignored) {}
+            return true;
         }
     }
 
     private void sendSingleMessage(String msg) {
-        try (Socket socket = new Socket()) {
-            socket.connect(new InetSocketAddress(ipServer, tcpPortServer), 5000);
-            socket.setSoTimeout(5000);
+        String previousIp = ipServer;
+        int previousPort = tcpPortServer;
+        boolean waitedOnce = false;
 
-            try (BufferedWriter out = new BufferedWriter(
-                    new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try (Socket socket = connectToCurrentServer();
+                 BufferedWriter out = new BufferedWriter(
+                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
                  BufferedReader in = new BufferedReader(
                          new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
 
@@ -216,7 +264,6 @@ public class ClientComms {
                     return;
                 }
 
-                @SuppressWarnings("unchecked")
                 Map<String, Object> json = gson.fromJson(reply, Map.class);
                 String type = (String) json.get("type");
                 String message = (String) json.getOrDefault("message", "");
@@ -224,22 +271,50 @@ public class ClientComms {
                 switch (type) {
                     case "REGISTER_OK":
                         System.out.println("Registo bem-sucedido!");
-                        break;
+                        return;
                     case "REGISTER_FAIL":
                         System.out.println("Falha no registo: " + message);
-                        break;
+                        return;
                     case "LOGIN_OK":
                         System.out.println("Login bem-sucedido!");
-                        break;
+                        return;
                     case "LOGIN_FAIL":
                         System.out.println("Falha no login: " + message);
-                        break;
+                        return;
                     default:
                         System.out.println("Resposta inesperada do servidor: " + type);
+                        return;
+                }
+
+            } catch (IOException e) {
+                System.err.println("Erro na comunicação TCP: " + e.getMessage());
+                try {
+                    getTCP();
+                } catch (IOException ex) {
+                    System.err.println("Erro ao contactar diretoria durante recuperação: " + ex.getMessage());
+                    System.exit(1);
+                }
+
+                boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
+                if (changed) {
+                    System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
+                    previousIp = ipServer;
+                    previousPort = tcpPortServer;
+                } else {
+                    if (waitedOnce) {
+                        System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
+                        System.exit(1);
+                    }
+                    System.out.println("Mesmo servidor principal; aguardar 20s e tentar novamente...");
+                    try {
+                        Thread.sleep(20_000L);
+                    } catch (InterruptedException ignored) {}
+                    waitedOnce = true;
                 }
             }
-        } catch (IOException e) {
-            System.err.println("Erro na comunicação TCP: " + e.getMessage());
         }
+
+        System.out.println("Operação de envio falhou após tentativas. A terminar.");
+        System.exit(1);
     }
 }
