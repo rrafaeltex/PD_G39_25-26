@@ -2,6 +2,7 @@ package pt.isec.pd.g39.servidor.database;
 
 import java.io.File;
 import java.sql.*;
+import java.util.Map;
 
 public class Database {
 
@@ -107,6 +108,90 @@ public class Database {
                 FOREIGN KEY (pergunta_id) REFERENCES pergunta(id)
             );
         """);
+    }
+
+    //
+// Registar estudante ou professor
+
+    public static boolean registerEstudante(int numero, String nome, String email, String password) {
+        String sql = "INSERT INTO estudante (numero, nome, email, password) VALUES (" +
+                numero + ", '" + nome + "', '" + email + "', '" + password + "')";
+
+        try {
+            // Usamos executeLocalUpdate para garantir que a versão da BD sobe!
+            executeLocalUpdate(sql);
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Erro ao registar estudante: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public static boolean registerDocente(String nome, String email, String password) {
+        // Nota: O enunciado diz que o registo de docente precisa de um código secreto,
+        // mas isso valida-se ANTES de chamar esta função. Aqui só guardamos.
+        String sql = "INSERT INTO docente (nome, email, password) VALUES ('" +
+                nome + "', '" + email + "', '" + password + "')";
+
+        try {
+            executeLocalUpdate(sql);
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Erro ao registar docente: " + e.getMessage());
+            return false;
+        }
+    }
+
+    //
+// Adiciona isto à classe Database
+
+    public static Map<String, Object> checkLogin(String email, String password) {
+        // Primeiro tenta ver se é Estudante
+        String sqlEstudante = "SELECT * FROM estudante WHERE email = ? AND password = ?";
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sqlEstudante)) {
+
+            ps.setString(1, email);
+            ps.setString(2, password);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                // Encontrou estudante!
+                return Map.of(
+                        "sucesso", true,
+                        "nome", rs.getString("nome"),
+                        "perfil", "estudante",
+                        "id", rs.getInt("numero") // O ID do estudante é o número
+                );
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        // Se não for estudante, tenta ver se é Docente
+        String sqlDocente = "SELECT * FROM docente WHERE email = ? AND password = ?";
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sqlDocente)) {
+
+            ps.setString(1, email);
+            ps.setString(2, password);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                // Encontrou docente!
+                return Map.of(
+                        "sucesso", true,
+                        "nome", rs.getString("nome"),
+                        "perfil", "docente",
+                        "id", rs.getInt("id")
+                );
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return null; // Não encontrou ninguém
     }
 
     // -------- Versionamento --------
