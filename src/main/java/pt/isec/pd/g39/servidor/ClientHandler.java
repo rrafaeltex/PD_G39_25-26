@@ -10,6 +10,7 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import com.google.gson.Gson;
+import pt.isec.pd.g39.servidor.database.Database;
 
 
 public class ClientHandler extends Thread {
@@ -75,47 +76,52 @@ public class ClientHandler extends Thread {
     /**
      * Trata de um pedido de Login.
      */
+//
     private void handleLogin(Map<String, Object> request) {
         String email = (String) request.get("email");
         String password = (String) request.get("password");
 
-        // ---LÓGICA DA DATABASE ---
-        // User user = Database.checkLogin(email, password);
-        // if (user != null) { ... }
+        System.out.println("A verificar login para: " + email);
 
-        System.out.println("PLACEHOLDER: A processar LOGIN para " + email);
+        // CHAMADA REAL À BASE DE DADOS
+        Map<String, Object> user = Database.checkLogin(email, password);
 
-        // Simular uma resposta de sucesso (temporário)
-        if (password.equals("123")) {
-            sendResponse("LOGIN_OK", Map.of(
-                    "nome", "Utilizador Fictício",
-                    "profile", "student" // ou "teacher"
-            ));
+        if (user != null) {
+            // Login OK! Devolvemos os dados do utilizador ao cliente
+            Map<String, Object> responseData = new HashMap<>(user);
+            responseData.remove("sucesso"); // Não precisamos enviar este flag
+            sendResponse("LOGIN_OK", responseData);
         } else {
-            sendResponse("LOGIN_FAIL", Map.of("message", "Email ou password incorretos"));
+            sendResponse("LOGIN_FAIL", Map.of("message", "Email ou password errados"));
         }
     }
 
     /**
      * Trata de um pedido de Registo de Estudante.
      */
+    //
     private void handleRegisterStudent(Map<String, Object> request) {
         String nome = (String) request.get("nome");
         String email = (String) request.get("email");
-        // ... apanhar os outros campos ...
+        String password = (String) request.get("password");
+        // O cliente tem de enviar o numero de estudante também!
+        // Se o teu cliente ainda não pede número, assume um aleatório ou altera o cliente.
+        // Vamos assumir que vem no JSON como "numero":
+        // int numero = ((Double) request.get("numero")).intValue();
 
-        // --- AQUI ENTRARIA A LÓGICA DA DATABASE ---
-        // Exemplo:
-        // boolean success = Database.registerStudent(...);
-        // if (success) { ... }
+        // Para testar rápido, vou usar o hashCode do email como número (só para não dar erro agora)
+        int numero = Math.abs(email.hashCode());
 
-        System.out.println("PLACEHOLDER: A tentar registar estudante " + nome);
+        System.out.println("A registar estudante: " + nome);
 
-        // Simular uma resposta
-        sendResponse("REGISTER_OK", null);
-        // ou: sendResponse("REGISTER_FAIL", Map.of("message", "Email já existe"));
+        boolean sucesso = Database.registerEstudante(numero, nome, email, password);
+
+        if (sucesso) {
+            sendResponse("REGISTER_OK", Map.of("message", "Registo efetuado!"));
+        } else {
+            sendResponse("REGISTER_FAIL", Map.of("message", "Erro: Email ou número já existem."));
+        }
     }
-
     /**
      * Trata de um pedido de Registo de Docente.
      */
