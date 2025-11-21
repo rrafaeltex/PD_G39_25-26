@@ -125,20 +125,33 @@ public class ClientHandler extends Thread {
     /**
      * Trata de um pedido de Registo de Docente.
      */
+    //
     private void handleRegisterTeacher(Map<String, Object> request) {
+        // 1. Extrair dados do JSON
         String secretCode = (String) request.get("secret_code");
+        String nome = (String) request.get("nome");
+        String email = (String) request.get("email");
+        String password = (String) request.get("password");
 
-        // LÓGICA DA DATABASE ---
-        // Exemplo:
-        // boolean goodCode = Database.checkTeacherCode(secretCode);
+        System.out.println("A verificar registo de docente: " + nome);
 
-        System.out.println("PLACEHOLDER: A verificar código de docente...");
-        // tem de ser o codigo que esta mna DATABASE
+        // 2. Validar Código Secreto (Hardcoded "codigo123" para já)
+        // Nota: O enunciado pede que isto esteja na BD, podes adicionar à tabela 'config' mais tarde.
         if ("codigo123".equals(secretCode)) {
-            // ... (aqui farias o resto do registo, tal como o de estudante)
-            sendResponse("REGISTER_OK", null);
+
+            // 3. Registar na Base de Dados
+            // Chama a função que cria o INSERT INTO docente...
+            boolean sucesso = Database.registerDocente(nome, email, password);
+
+            if (sucesso) {
+                sendResponse("REGISTER_OK", Map.of("message", "Docente registado com sucesso!"));
+            } else {
+                // Falha geralmente se o email já existir (UNIQUE constraint)
+                sendResponse("REGISTER_FAIL", Map.of("message", "Erro: Email já está em uso."));
+            }
+
         } else {
-            sendResponse("REGISTER_FAIL", Map.of("message", "Código de docente inválido"));
+            sendResponse("REGISTER_FAIL", Map.of("message", "Código de acesso de docente inválido!"));
         }
     }
 
