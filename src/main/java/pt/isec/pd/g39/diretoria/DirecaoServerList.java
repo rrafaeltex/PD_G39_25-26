@@ -1,5 +1,7 @@
 package pt.isec.pd.g39.diretoria;
 
+import com.google.gson.Gson;
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -7,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class DirecaoServerList {
-    private final List<ServidorInfo> servidores = new ArrayList<>();
+    private static final List<ServidorInfo> servidores = new ArrayList<>();
 
     public synchronized void register(InetAddress ip, int tcpClients, int tcpPeers) {
 
@@ -59,7 +61,7 @@ public class DirecaoServerList {
 
     }
 
-    public synchronized List<ServidorInfo> getServidores() {
+    public static synchronized List<ServidorInfo> getServidores() {
         return new ArrayList<>(servidores);
     }
 
@@ -86,4 +88,44 @@ public class DirecaoServerList {
         }
         System.out.println("[Direcao] =====================================");
     }
+
+    public static synchronized void ShutdownToAllServers() {
+        try (DatagramSocket socket = new DatagramSocket()) {
+            Gson gson = new Gson();
+
+            // ✅ ENVIAR VIA MULTICAST PARA TODOS OS SERVIDORES
+            String multicastIp = "230.30.30.30";
+            int multicastPort = 5000;
+
+            String msg = gson.toJson(Map.of("type", "SHUTDOWN"));
+            byte[] data = msg.getBytes();
+
+            var servidores = getServidores();
+
+            if (servidores.isEmpty()) {
+                System.out.println("[SHUTDOWN] Nenhum servidor registado.");
+                return;
+            }
+
+            System.out.println("[SHUTDOWN] A enviar comando SHUTDOWN via multicast para "
+                    + servidores.size() + " servidor(es)...");
+
+            // ✅ ENVIAR UMA ÚNICA MENSAGEM MULTICAST (todos recebem)
+            DatagramPacket packet = new DatagramPacket(
+                    data, data.length,
+                    InetAddress.getByName(multicastIp), multicastPort
+            );
+
+            socket.send(packet);
+            System.out.println("[SHUTDOWN] ✉️  Enviado via multicast " + multicastIp + ":" + multicastPort);
+
+            // Dar tempo para os servidores processarem
+            Thread.sleep(1500);
+
+        } catch (Exception e) {
+            System.err.println("[SHUTDOWN] Erro ao enviar comandos: " + e.getMessage());
+        }
+    }
+
+
 }

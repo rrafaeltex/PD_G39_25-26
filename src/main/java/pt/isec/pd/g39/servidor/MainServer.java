@@ -15,9 +15,12 @@ public class MainServer {
         String dbPath = args[2];
         String multicastLocalIp = args[3];
 
-       ServerNode node = new ServerNode(dirIp, port, dbPath, multicastLocalIp);
-       System.out.println("Servidor ativo no porto " + port);
-       node.start();
+
+        ServerNode node = new ServerNode(dirIp, port, dbPath, multicastLocalIp);
+        ShutDownHandle shutdownHandler = new ShutDownHandle();
+        System.out.println("Servidor ativo no porto " + port);
+        node.start();
+        shutdownHandler.start();
 
     }
 }

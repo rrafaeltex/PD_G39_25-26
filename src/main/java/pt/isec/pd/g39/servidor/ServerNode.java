@@ -151,9 +151,9 @@ public class ServerNode {
                 primaryTcpClients = ((Double) json.get("primary_tcp_clients")).intValue();
                 primaryTcpPeers = ((Double) json.get("primary_tcp_peers")).intValue();
 
-                InetAddress myIp = InetAddress.getLocalHost();
+                //InetAddress myIp = InetAddress.getLocalHost();
 
-                if (primaryIp.equals(myIp.getHostAddress()) && primaryTcpClients == clientPort) {
+                if (primaryIp.equals(directoryIp) && primaryTcpClients == clientPort) {
                     becomePrimary();
                 } else {
                     isPrimary = false;
