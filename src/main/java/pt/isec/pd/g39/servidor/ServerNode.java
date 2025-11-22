@@ -101,7 +101,7 @@ public class ServerNode {
         ClientServer.start(clientServerSocket);
 
         try {
-            String myIp = InetAddress.getLocalHost().getHostAddress();
+            String myIp = "127.0.0.1";
             HeartbeatManager.init(directoryIp, directoryPort, myIp, clientPort, peerPort);
             HeartbeatManager.start();
         } catch (Exception e) {

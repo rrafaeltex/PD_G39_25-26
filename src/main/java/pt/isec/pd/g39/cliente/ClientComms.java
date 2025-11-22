@@ -1,3 +1,4 @@
+// java
 package pt.isec.pd.g39.cliente;
 
 import com.google.gson.Gson;
@@ -226,9 +227,13 @@ public class ClientComms {
                 String type = (String) json.get("type");
                 String message = (String) json.get("message");
                 String perfil = (String) json.get("perfil");
-                Double idDouble = (Double) json.get("id");
-                idUser = idDouble.intValue();
-                if(perfil.equals("docente")){
+                Object idObj = json.get("id");
+                if (idObj instanceof Double) {
+                    idUser = ((Double) idObj).intValue();
+                } else if (idObj instanceof Number) {
+                    idUser = ((Number) idObj).intValue();
+                }
+                if (perfil != null && perfil.equals("docente")) {
                     isDocente = true;
                 }
                 if ("LOGIN_OK".equals(type)) {
@@ -271,48 +276,6 @@ public class ClientComms {
         System.exit(1);
     }
 
-    private boolean attemptRecoveryLogin(long deadlineMs, boolean alreadyWaitedOnce) {
-        /*
-        Quando a conexão TCP com o servidor atual deixa de estar operacional, a aplicação
-        cliente volta a solicitar ao serviço de diretoria os dados sobre o servidor principal atual.
-        Se for diferente do anterior (que deixou de estar acessível), volta a ligar-se e a
-        autenticar-se, sem envolver o utilizador e tentando passar esta situação de
-        recuperação de falha o mais despercebida possível. Se os dados corresponderem ao
-        mesmo servidor, volta a tentar uma segunda vez 20 segundos depois. Caso a operação
-        não seja bem-sucedida, a aplicação termina.
-        */
-        String previousIp = ipServer;
-        int previousPort = tcpPortServer;
-        try {
-            getTCP();
-        } catch (IOException e) {
-            System.err.println("Erro ao contactar diretoria durante recuperação: " + e.getMessage());
-            return false;
-        }
-
-        boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
-        if (changed) {
-            System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reconectar automaticamente.");
-            return true;
-        } else {
-            if (alreadyWaitedOnce) {
-                System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
-                return false;
-            }
-            System.out.println("Mesmo servidor principal; aguardar 20s e tentar novamente...");
-            try {
-                long remaining = Math.max(0, deadlineMs - System.currentTimeMillis());
-                long wait = Math.min(20_000L, remaining);
-                if (wait <= 0) {
-                    System.out.println("Janela de login expirada durante espera.");
-                    return false;
-                }
-                Thread.sleep(wait);
-            } catch (InterruptedException ignored) {}
-            return true;
-        }
-    }
-
     private void sendSingleMessage(String msg) {
         String previousIp = ipServer;
         int previousPort = tcpPortServer;
@@ -340,14 +303,15 @@ public class ClientComms {
                 String message = (String) json.getOrDefault("message", "");
                 Object idObj = json.get("id");
 
-                if (idObj != null) {
+                if (idObj instanceof Double) {
                     idUser = ((Double) idObj).intValue();
+                } else if (idObj instanceof Number) {
+                    idUser = ((Number) idObj).intValue();
                 }
 
                 switch (type) {
                     case "REGISTER_OK":
                         System.out.println("Registo bem-sucedido!");
-
                         return;
                     case "REGISTER_FAIL":
                         System.out.println("Falha no registo: " + message);
@@ -365,28 +329,21 @@ public class ClientComms {
 
             } catch (IOException e) {
                 System.err.println("Erro na comunicação TCP: " + e.getMessage());
-                try {
-                    getTCP();
-                } catch (IOException ex) {
-                    System.err.println("Erro ao contactar diretoria durante recuperação: " + ex.getMessage());
-                    System.exit(1);
-                }
-
-                boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
-                if (changed) {
-                    System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
-                    previousIp = ipServer;
-                    previousPort = tcpPortServer;
-                } else {
-                    if (waitedOnce) {
-                        System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
+                RecoveryAction action = attemptRecovery(previousIp, previousPort, waitedOnce, -1);
+                switch (action) {
+                    case RETRY_IMMEDIATE:
+                        System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
+                        previousIp = ipServer;
+                        previousPort = tcpPortServer;
+                        break;
+                    case RETRY_AFTER_WAIT:
+                        System.out.println("Mesmo servidor principal; aguardar 20s e tentar novamente...");
+                        waitedOnce = true;
+                        break;
+                    case GIVE_UP:
+                    default:
+                        System.out.println("Operação de envio falhou após tentativas. A terminar.");
                         System.exit(1);
-                    }
-                    System.out.println("Mesmo servidor principal; aguardar 20s e tentar novamente...");
-                    try {
-                        Thread.sleep(20_000L);
-                    } catch (InterruptedException ignored) {}
-                    waitedOnce = true;
                 }
             }
         }
@@ -439,6 +396,7 @@ public class ClientComms {
         sendSingleMessage(msg);
     }
 
+    @SuppressWarnings("unchecked")
     private void editarPergunta(){
         Scanner sc = new Scanner(System.in);
 
@@ -538,38 +496,61 @@ public class ClientComms {
                 "opcoes", opcoes
         ));
 
-        resposta = sendAndReceive(msg);
-        resposta = sendAndReceive(msg);
+        Map<String, Object> respostaFinal = sendAndReceive(msg);
 
-        if ("EDIT_QUESTION_OK".equals(resposta.get("type")))
+        if ("EDIT_QUESTION_OK".equals(respostaFinal.get("type")))
             System.out.println("Pergunta editada com sucesso!");
         else
             System.out.println("Erro ao editar pergunta.");
     }
 
     private Map<String, Object> sendAndReceive(String msg) {
-        try (Socket socket = connectToCurrentServer();
-             BufferedWriter out = new BufferedWriter(
-                     new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
-             BufferedReader in = new BufferedReader(
-                     new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+        String previousIp = ipServer;
+        int previousPort = tcpPortServer;
+        boolean waitedOnce = false;
 
-            out.write(msg + "\n");
-            out.flush();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            try (Socket socket = connectToCurrentServer();
+                 BufferedWriter out = new BufferedWriter(
+                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                 BufferedReader in = new BufferedReader(
+                         new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
 
-            String reply = in.readLine();
-            if (reply == null || reply.isBlank()) {
-                return Map.of("type", "ERROR", "message", "Empty or closed reply from server");
+                out.write(msg + "\n");
+                out.flush();
+
+                String reply = in.readLine();
+                if (reply == null || reply.isBlank()) {
+                    return Map.of("type", "ERROR", "message", "Empty or closed reply from server");
+                }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> parsed = gson.fromJson(reply, Map.class);
+                return parsed;
+
+            } catch (IOException e) {
+                System.err.println("Erro na comunicação TCP: " + e.getMessage());
+                RecoveryAction action = attemptRecovery(previousIp, previousPort, waitedOnce, -1);
+                switch (action) {
+                    case RETRY_IMMEDIATE:
+                        System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
+                        previousIp = ipServer;
+                        previousPort = tcpPortServer;
+                        break;
+                    case RETRY_AFTER_WAIT:
+                        waitedOnce = true;
+                        break;
+                    case GIVE_UP:
+                    default:
+                        return Map.of("type", "ERROR", "message", e.getMessage());
+                }
+            } catch (Exception e) {
+                System.err.println("Erro: " + e.getMessage());
+                return Map.of("type", "ERROR", "message", e.getMessage());
             }
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> parsed = gson.fromJson(reply, Map.class);
-            return parsed;
-
-        } catch (Exception e) {
-            System.err.println("Erro: " + e.getMessage());
-            return Map.of("type", "ERROR", "message", e.getMessage());
         }
+
+        return Map.of("type", "ERROR", "message", "Operação de envio falhou após tentativas.");
     }
 
     private void eliminarPergunta() {
@@ -660,6 +641,70 @@ public class ClientComms {
                     + " // " + p.get("data_inicio") + " até " + p.get("data_fim")
                     + " // Codigo de acesso: " + p.get("codigo_acesso")
                     + " // ID pergunta: " + p.get("id"));
+        }
+    }
+
+    private enum RecoveryAction {
+        RETRY_IMMEDIATE,
+        RETRY_AFTER_WAIT,
+        GIVE_UP
+    }
+
+    private RecoveryAction attemptRecovery(String previousIp, int previousPort, boolean alreadyWaitedOnce, long maxWaitMs) {
+        try {
+            getTCP();
+        } catch (IOException e) {
+            System.err.println("Erro ao contactar diretoria durante recuperação: " + e.getMessage());
+            return RecoveryAction.GIVE_UP;
+        }
+
+        boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
+        if (changed) {
+            return RecoveryAction.RETRY_IMMEDIATE;
+        } else {
+            if (alreadyWaitedOnce) {
+                System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
+                return RecoveryAction.GIVE_UP;
+            }
+            long wait;
+            if (maxWaitMs > 0) {
+                wait = Math.min(20_000L, maxWaitMs);
+            } else {
+                wait = 20_000L;
+            }
+            if (wait <= 0) {
+                System.out.println("Janela de login expirada durante espera.");
+                return RecoveryAction.GIVE_UP;
+            }
+            try {
+                Thread.sleep(wait);
+            } catch (InterruptedException ignored) {}
+            return RecoveryAction.RETRY_AFTER_WAIT;
+        }
+    }
+
+    private boolean attemptRecoveryLogin(long deadlineMs, boolean alreadyWaitedOnce) {
+        /*
+        Quando a conexão TCP com o servidor atual deixa de estar operacional, a aplicação
+        cliente volta a solicitar ao serviço de diretoria os dados sobre o servidor principal atual.
+        Se for diferente do anterior (que deixou de estar acessível), volta a ligar-se e a
+        autenticar-se, sem envolver o utilizador e tentando passar esta situação de
+        recuperação de falha o mais despercebida possível. Se os dados corresponderem ao
+        mesmo servidor, volta a tentar uma segunda vez 20 segundos depois. Caso a operação
+        não seja bem-sucedida, a aplicação termina.
+        */
+        String previousIp = ipServer;
+        int previousPort = tcpPortServer;
+        RecoveryAction action = attemptRecovery(previousIp, previousPort, alreadyWaitedOnce, Math.max(0, deadlineMs - System.currentTimeMillis()));
+        switch (action) {
+            case RETRY_IMMEDIATE:
+                System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reconectar automaticamente.");
+                return true;
+            case RETRY_AFTER_WAIT:
+                return true;
+            case GIVE_UP:
+            default:
+                return false;
         }
     }
 }
