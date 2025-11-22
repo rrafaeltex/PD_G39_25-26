@@ -59,6 +59,22 @@ public class ClientHandler extends Thread {
                         handleCreateQuestion(request);
                         break;
 
+                    case "LIST_QUESTIONS":
+                        handleListQuestions(request);
+                        break;
+
+                    case "GET_QUESTION_FOR_EDIT":
+                        handleGetQuestionForEdit(request);
+                        break;
+
+                    case "EDIT_QUESTION":
+                        handleEditQuestion(request);
+                        break;
+
+                    case "DELETE_QUESTION":
+                        handleDeleteQuestion(request);
+                        break;
+
                     // Adicionar mais 'cases' para as outras funções
                     // ex: "CREATE_QUESTION", "GET_QUESTIONS", "SUBMIT_ANSWER"
 
@@ -203,5 +219,61 @@ public class ClientHandler extends Thread {
             ));
         }
     }
-}
 
+    private void handleListQuestions(Map<String, Object> request) {
+        int docenteId = ((Double) request.get("docente_id")).intValue();
+
+        List<Map<String, Object>> perguntas = Database.listarPerguntas(docenteId);
+
+        sendResponse("LIST_QUESTIONS_OK", Map.of("perguntas", perguntas));
+    }
+
+    private void handleGetQuestionForEdit(Map<String, Object> request) {
+        int perguntaId = ((Double) request.get("pergunta_id")).intValue();
+
+        if (Database.perguntaTemRespostas(perguntaId)) {
+            sendResponse("QUESTION_HAS_ANSWERS", Map.of());
+            return;
+        }
+
+        Map<String, Object> pergunta = Database.getPerguntaCompleta(perguntaId);
+
+        sendResponse("GET_QUESTION_OK", pergunta);
+    }
+
+    private void handleEditQuestion(Map<String, Object> request) {
+        int perguntaId = ((Double) request.get("pergunta_id")).intValue();
+
+        String enunciado = (String) request.get("enunciado");
+        String di = (String) request.get("data_inicio");
+        String df = (String) request.get("data_fim");
+        List<Map<String, Object>> opcoes =
+                (List<Map<String, Object>>) request.get("opcoes");
+
+        boolean ok = Database.editarPergunta(perguntaId, enunciado, di, df, opcoes);
+
+        if (ok)
+            sendResponse("EDIT_QUESTION_OK", Map.of("message", "Atualizada"));
+        else
+            sendResponse("EDIT_QUESTION_FAIL", Map.of("message", "Erro ao atualizar"));
+    }
+
+    private void handleDeleteQuestion(Map<String, Object> request) {
+        int perguntaId = ((Double) request.get("pergunta_id")).intValue();
+
+        if (Database.perguntaTemRespostas(perguntaId)) {
+            sendResponse("DELETE_QUESTION_FAIL",
+                    Map.of("message", "A pergunta já tem respostas. Não pode ser eliminada."));
+            return;
+        }
+
+        boolean ok = Database.eliminarPergunta(perguntaId);
+
+        if (ok)
+            sendResponse("DELETE_QUESTION_OK", Map.of("message", "Pergunta eliminada com sucesso!"));
+        else
+            sendResponse("DELETE_QUESTION_FAIL", Map.of("message", "Erro ao eliminar pergunta."));
+    }
+
+
+}

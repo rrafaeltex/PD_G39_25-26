@@ -9,6 +9,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
@@ -22,7 +23,7 @@ public class ClientComms {
 
     private final Gson gson = new Gson();
     private static final long LOGIN_TIME = 30_000L;
-    
+
     boolean isDocente = false;
     int idUser;
 
@@ -46,7 +47,7 @@ public class ClientComms {
          */
         if (choice.equals("login")) {
             runLoginSession(scanner);
-            done = true;
+
         } else if (choice.equals("registo")) {
             System.out.print("Email: ");
             String email = scanner.nextLine().trim();
@@ -56,7 +57,7 @@ public class ClientComms {
             String nome = scanner.nextLine().trim();
             System.out.print("Estudante (S) ou Docente (D)? ");
             String role = scanner.nextLine().trim().toLowerCase();
-            String msg;
+            String msg = "";
             if (role.equals("s")) {
                 System.out.print("Numero de estudante?");
                 String n = scanner.nextLine().trim().toLowerCase();
@@ -67,7 +68,7 @@ public class ClientComms {
                         "password", password,
                         "numero", n
                 ));
-            } else {
+            } else if(role.equals("d")){
                 System.out.println("Secret Code: ");
                 String secretCode = scanner.nextLine().trim();
                 msg = gson.toJson(Map.of(
@@ -84,24 +85,50 @@ public class ClientComms {
             System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
         }
         while (!done) {
-            System.out.println("O que fazer:");
-            System.out.println("1 -> Sair");
-            System.out.println("2 -> Criar uma pergunta(apenas docentes)");
+            if(isDocente){
+                System.out.println("O que fazer:");
+                System.out.println("1 -> Sair");
+                System.out.println("2 -> Criar uma pergunta");
+                System.out.println("3 -> Editar Pergunta");
+                System.out.println("4 -> Eliminar Perguntas");
 
-            String choice2 = scanner.nextLine().trim();
-            switch(choice2){
-                case "1":
-                    done = true;
-                    break;
-                case "2":
-                    if(isDocente){
+                String choice2 = scanner.nextLine().trim();
+                switch(choice2){
+                    case "1":
+                        done = true;
+                        break;
+                    case "2":
                         criarPergunta();
-                    }else{
-                        System.out.println("Apenas docentes podem criar perguntas.");
-                    }
-                default:
-                    done = true;
+                        break;
+                    case "3":
+                        editarPergunta();
+                        break;
+                    case"4":
+                        eliminarPergunta();
+                        break;
+                    default:
+                        done = true;
+                }
+            } else{
+                System.out.println("O que fazer:");
+                System.out.println("1 -> Sair");
+
+                String choice2 = scanner.nextLine().trim();
+                switch(choice2){
+                    case "1":
+                        done = true;
+                        break;
+                    case "2":
+                        if(isDocente){
+                            criarPergunta();
+                        }else{
+                            System.out.println("Apenas docentes podem criar perguntas.");
+                        }
+                    default:
+                        done = true;
+                }
             }
+
         }
         System.out.println("A terminar.");
     }
@@ -357,7 +384,7 @@ public class ClientComms {
         System.exit(1);
     }
 
-    void criarPergunta() {
+    private void criarPergunta() {
         Scanner sc = new Scanner(System.in);
 
         System.out.print("Enunciado: ");
@@ -372,7 +399,7 @@ public class ClientComms {
         System.out.print("Quantas opções? ");
         int n = Integer.parseInt(sc.nextLine());
 
-        List<Map<String, Object>> opcoes = new java.util.ArrayList<>();
+        List<Map<String, Object>> opcoes = new ArrayList<>();
 
         for (int i = 0; i < n; i++) {
             System.out.println("Opção " + (char)('A' + i));
@@ -400,5 +427,176 @@ public class ClientComms {
 
         sendSingleMessage(msg);
     }
+
+    private void editarPergunta(){
+        Scanner sc = new Scanner(System.in);
+
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTIONS",
+                "docente_id", idUser
+        ));
+
+        Map<String, Object> resposta = sendAndReceive(msg);
+        if(!"LIST_QUESTIONS_OK".equals(resposta.get("type"))){
+            System.out.println("Erro ao obter perguntas.");
+            return;
+        }
+
+        List<Map<String, Object>> perguntas =
+                (List<Map<String, Object>>) resposta.get("perguntas");
+
+        if (perguntas.isEmpty()) {
+            System.out.println("Não tem perguntas para editar.");
+            return;
+        }
+
+        // 2. Mostrar lista com índice
+        System.out.println("\n=== PERGUNTAS CRIADAS ===");
+        for (int i = 0; i < perguntas.size(); i++) {
+            System.out.println((i + 1) + " -> " +
+                    perguntas.get(i).get("enunciado") +
+                    " (Código: " + perguntas.get(i).get("codigo_acesso") + ")");
+        }
+
+        System.out.print("Escolha o número da pergunta: ");
+        int idx = Integer.parseInt(sc.nextLine()) - 1;
+
+        int perguntaId = ((Double) perguntas.get(idx).get("id")).intValue();
+
+        // 3. Pedir detalhes para edição
+        msg = gson.toJson(Map.of(
+                "type", "GET_QUESTION_FOR_EDIT",
+                "pergunta_id", perguntaId
+        ));
+
+        resposta = sendAndReceive(msg);
+
+        if ("QUESTION_HAS_ANSWERS".equals(resposta.get("type"))) {
+            System.out.println("Não é possível editar — já existem respostas.");
+            return;
+        }
+
+        if (!"GET_QUESTION_OK".equals(resposta.get("type"))) {
+            System.out.println("Erro ao obter detalhes da pergunta.");
+            return;
+        }
+
+        // Dados recebidos
+        String enunciado = (String) resposta.get("enunciado");
+        String dataInicio = (String) resposta.get("data_inicio");
+        String dataFim = (String) resposta.get("data_fim");
+        List<Map<String, Object>> opcoes =
+                (List<Map<String, Object>>) resposta.get("opcoes");
+
+        // 4. EDITAR (perguntas ao utilizador)
+        System.out.println("\nNovo enunciado (ENTER mantém): " + enunciado);
+        String novoEnunciado = sc.nextLine();
+        if (novoEnunciado.isBlank()) novoEnunciado = enunciado;
+
+        System.out.println("Nova data início (ENTER mantém): " + dataInicio);
+        String novaDI = sc.nextLine();
+        if (novaDI.isBlank()) novaDI = dataInicio;
+
+        System.out.println("Nova data fim (ENTER mantém): " + dataFim);
+        String novaDF = sc.nextLine();
+        if (novaDF.isBlank()) novaDF = dataFim;
+
+        // 5. Editar opções
+        for (int i = 0; i < opcoes.size(); i++) {
+            Map<String, Object> op = opcoes.get(i);
+            System.out.println("Opção " + op.get("letra") + ": " + op.get("texto"));
+
+            System.out.print("Novo texto (ENTER mantém): ");
+            String novoTexto = sc.nextLine();
+            if (!novoTexto.isBlank())
+                op.put("texto", novoTexto);
+
+            System.out.print("É a correta? (s/n, ENTER mantém): ");
+            String cor = sc.nextLine().trim();
+            if (cor.equalsIgnoreCase("s")) op.put("correta", true);
+            else if (cor.equalsIgnoreCase("n")) op.put("correta", false);
+        }
+
+        // 6. Enviar alterações
+        msg = gson.toJson(Map.of(
+                "type", "EDIT_QUESTION",
+                "pergunta_id", perguntaId,
+                "enunciado", novoEnunciado,
+                "data_inicio", novaDI,
+                "data_fim", novaDF,
+                "opcoes", opcoes
+        ));
+
+        resposta = sendAndReceive(msg);
+        resposta = sendAndReceive(msg);
+
+        if ("EDIT_QUESTION_OK".equals(resposta.get("type")))
+            System.out.println("Pergunta editada com sucesso!");
+        else
+            System.out.println("Erro ao editar pergunta.");
+    }
+
+    private Map<String, Object> sendAndReceive(String msg) {
+        try (Socket socket = connectToCurrentServer();
+             BufferedWriter out = new BufferedWriter(
+                     new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+             BufferedReader in = new BufferedReader(
+                     new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+
+            out.write(msg + "\n");
+            out.flush();
+            String reply = in.readLine();
+            return gson.fromJson(reply, Map.class);
+
+        } catch (Exception e) {
+            System.out.println("Erro: " + e.getMessage());
+            return Map.of("type", "ERROR");
+        }
+    }
+
+    private void eliminarPergunta() {
+        Scanner sc = new Scanner(System.in);
+
+        // 1. Pedir lista ao servidor
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTIONS",
+                "docente_id", idUser
+        ));
+
+        Map<String, Object> resposta = sendAndReceive(msg);
+
+        if (!"LIST_QUESTIONS_OK".equals(resposta.get("type"))) {
+            System.out.println("Erro ao obter perguntas.");
+            return;
+        }
+
+        List<Map<String, Object>> perguntas = (List<Map<String, Object>>) resposta.get("perguntas");
+
+        if (perguntas.isEmpty()) {
+            System.out.println("Não tem perguntas criadas.");
+            return;
+        }
+
+        System.out.println("Perguntas disponíveis:");
+        for (int i = 0; i < perguntas.size(); i++) {
+            System.out.println(i + " -> " + perguntas.get(i).get("enunciado"));
+        }
+
+        System.out.print("Escolha o número da pergunta a eliminar: ");
+        int escolha = Integer.parseInt(sc.nextLine());
+
+        int perguntaId = ((Double) perguntas.get(escolha).get("id")).intValue();
+
+        // 3. Enviar pedido DELETE
+        msg = gson.toJson(Map.of(
+                "type", "DELETE_QUESTION",
+                "pergunta_id", perguntaId
+        ));
+
+        Map<String, Object> respostaDelete = sendAndReceive(msg);
+
+        System.out.println(respostaDelete.get("message"));
+    }
+
 
 }

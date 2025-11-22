@@ -110,7 +110,7 @@ public class DirecaoServerList {
             System.out.println("[SHUTDOWN] A enviar comando SHUTDOWN via multicast para "
                     + servidores.size() + " servidor(es)...");
 
-            // ✅ ENVIAR UMA ÚNICA MENSAGEM MULTICAST (todos recebem)
+
             DatagramPacket packet = new DatagramPacket(
                     data, data.length,
                     InetAddress.getByName(multicastIp), multicastPort
