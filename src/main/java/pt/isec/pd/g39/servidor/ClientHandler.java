@@ -6,6 +6,7 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.net.*;
@@ -75,6 +76,10 @@ public class ClientHandler extends Thread {
                         handleDeleteQuestion(request);
                         break;
 
+                    case "LIST_QUESTIONS_FILTER":
+                        handleListFilterQuestions(request);
+                        break;
+
                     // Adicionar mais 'cases' para as outras funções
                     // ex: "CREATE_QUESTION", "GET_QUESTIONS", "SUBMIT_ANSWER"
 
@@ -125,7 +130,7 @@ public class ClientHandler extends Thread {
         String nome = (String) request.get("nome");
         String email = (String) request.get("email");
         String password = (String) request.get("password");
-        int numero = (int) request.get("numero");
+        int numero = Integer.parseInt((String) request.get("numero"));
 
         System.out.println("A registar estudante: " + nome);
 
@@ -274,6 +279,12 @@ public class ClientHandler extends Thread {
         else
             sendResponse("DELETE_QUESTION_FAIL", Map.of("message", "Erro ao eliminar pergunta."));
     }
+    private void handleListFilterQuestions(Map<String, Object> request) {
+        String filtro = (String) request.get("filtro");
 
+        List<Map<String, Object>> perguntas = Database.listarPerguntasFiltradas(filtro);
+
+        sendResponse("LIST_QUESTIONS_FILTER_OK", Map.of("perguntas", perguntas));
+    }
 
 }

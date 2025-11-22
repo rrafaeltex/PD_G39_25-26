@@ -36,31 +36,46 @@ public class ClientComms {
         getTCP();
 
         boolean done = false;
-
         Scanner scanner = new Scanner(System.in);
-        System.out.println("Registo ou Login?");
-        String choice = scanner.nextLine().trim().toLowerCase();
-        /*
-        Depois, começam por solicitar o email e a password ao utilizador para efeitos de
-        autenticação, ou o conjunto de dados necessários ao registo de um novo utilizador. Posteriomente,
-        a aplicação ira retirar estes dados da UI
-         */
+
+        String choice;
+        while (true) {
+            System.out.println("Registo ou Login?");
+            choice = scanner.nextLine().trim().toLowerCase();
+            if (choice.equals("login") || choice.equals("registo")) {
+                break;
+            }
+            System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
+        }
+
         if (choice.equals("login")) {
             runLoginSession(scanner);
-
-        } else if (choice.equals("registo")) {
+        } else {
             System.out.print("Email: ");
             String email = scanner.nextLine().trim();
+
             System.out.print("Password: ");
             String password = scanner.nextLine().trim();
+
             System.out.print("Nome: ");
             String nome = scanner.nextLine().trim();
-            System.out.print("Estudante (S) ou Docente (D)? ");
-            String role = scanner.nextLine().trim().toLowerCase();
+
+            String role;
+            while (true) {
+                System.out.print("Estudante (S) ou Docente (D)? ");
+                role = scanner.nextLine().trim().toLowerCase();
+                if (role.equals("s") || role.equals("d")) break;
+                System.out.println("Opção inválida. Introduza 'S' para Estudante ou 'D' para Docente.");
+            }
             String msg = "";
             if (role.equals("s")) {
-                System.out.print("Numero de estudante?");
-                String n = scanner.nextLine().trim().toLowerCase();
+                String n;
+                while (true) {
+                    System.out.print("Numero de estudante? ");
+                    n = scanner.nextLine().trim();
+                    if (!n.isBlank() && n.matches("\\d+")) break;
+                    System.out.println("Número inválido. Introduza apenas dígitos.");
+                }
                 msg = gson.toJson(Map.of(
                         "type", "REGISTER_STUDENT",
                         "nome", nome,
@@ -68,8 +83,8 @@ public class ClientComms {
                         "password", password,
                         "numero", n
                 ));
-            } else if(role.equals("d")){
-                System.out.println("Secret Code: ");
+            } else {
+                System.out.print("Secret Code: ");
                 String secretCode = scanner.nextLine().trim();
                 msg = gson.toJson(Map.of(
                         "type", "REGISTER_TEACHER",
@@ -81,19 +96,18 @@ public class ClientComms {
                 isDocente = true;
             }
             sendSingleMessage(msg);
-        } else {
-            System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
         }
         while (!done) {
-            if(isDocente){
+            if (isDocente) {
                 System.out.println("O que fazer:");
                 System.out.println("1 -> Sair");
                 System.out.println("2 -> Criar uma pergunta");
                 System.out.println("3 -> Editar Pergunta");
                 System.out.println("4 -> Eliminar Perguntas");
+                System.out.println("5 -> Listar Perguntas c/Filtro (Ativas/Futuras/Expiradas)");
 
                 String choice2 = scanner.nextLine().trim();
-                switch(choice2){
+                switch (choice2) {
                     case "1":
                         done = true;
                         break;
@@ -103,35 +117,32 @@ public class ClientComms {
                     case "3":
                         editarPergunta();
                         break;
-                    case"4":
+                    case "4":
                         eliminarPergunta();
                         break;
+                    case "5":
+                        consultarPerguntas();
+                        break;
                     default:
-                        done = true;
+                        System.out.println("Opção inválida. A voltar ao menu.");
                 }
-            } else{
+            } else {
                 System.out.println("O que fazer:");
                 System.out.println("1 -> Sair");
 
                 String choice2 = scanner.nextLine().trim();
-                switch(choice2){
+                switch (choice2) {
                     case "1":
                         done = true;
                         break;
-                    case "2":
-                        if(isDocente){
-                            criarPergunta();
-                        }else{
-                            System.out.println("Apenas docentes podem criar perguntas.");
-                        }
                     default:
-                        done = true;
+                        System.out.println("Opção inválida. A voltar ao menu.");
                 }
             }
-
         }
         System.out.println("A terminar.");
     }
+
 
     private void getTCP() throws IOException {
         /*
@@ -545,12 +556,19 @@ public class ClientComms {
 
             out.write(msg + "\n");
             out.flush();
+
             String reply = in.readLine();
-            return gson.fromJson(reply, Map.class);
+            if (reply == null || reply.isBlank()) {
+                return Map.of("type", "ERROR", "message", "Empty or closed reply from server");
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> parsed = gson.fromJson(reply, Map.class);
+            return parsed;
 
         } catch (Exception e) {
-            System.out.println("Erro: " + e.getMessage());
-            return Map.of("type", "ERROR");
+            System.err.println("Erro: " + e.getMessage());
+            return Map.of("type", "ERROR", "message", e.getMessage());
         }
     }
 
@@ -598,5 +616,50 @@ public class ClientComms {
         System.out.println(respostaDelete.get("message"));
     }
 
+    private void consultarPerguntas() {
+        Scanner scanner = new Scanner(System.in);
+        String choice = "";
+        while (true) {
+            System.out.print("Deseja consultar perguntas ativas, futuras ou expiradas? (A/F/E): ");
+            choice = scanner.nextLine().trim().toLowerCase();
+            if (choice.equals("a") || choice.equals("f") || choice.equals("e")) break;
+            System.out.println("Opção inválida. Introduza A para ativas, F para futuras ou E para expiradas.");
+        }
 
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTIONS_FILTER",
+                "filtro", choice
+        ));
+
+        Map<String, Object> resposta = sendAndReceive(msg);
+
+        if (!"LIST_QUESTIONS_FILTER_OK".equals(resposta.get("type"))) {
+            System.out.println("Erro ao obter perguntas: " + resposta.getOrDefault("message", "unknown"));
+            return;
+        }
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> perguntas = (List<Map<String, Object>>) resposta.get("perguntas");
+
+        if (perguntas == null || perguntas.isEmpty()) {
+            System.out.println("Não existem perguntas para este filtro.");
+            return;
+        }
+
+        String lista;
+        switch (choice) {
+            case "a": lista = "ativas"; break;
+            case "f": lista = "futuras"; break;
+            default:  lista = "expiradas"; break;
+        }
+
+        System.out.println("Perguntas " + lista + ":");
+        for (int i = 0; i < perguntas.size(); i++) {
+            Map<String, Object> p = perguntas.get(i);
+            System.out.println(i + " -> " + p.get("enunciado")
+                    + " // " + p.get("data_inicio") + " até " + p.get("data_fim")
+                    + " // Codigo de acesso: " + p.get("codigo_acesso")
+                    + " // ID pergunta: " + p.get("id"));
+        }
+    }
 }

@@ -451,6 +451,52 @@ public class Database {
         }
     }
 
+    public static List<Map<String, Object>> listarPerguntasFiltradas(String filtro) {
+        List<Map<String, Object>> lista = new java.util.ArrayList<>();
+
+        String sql;
+        String f = filtro == null ? "" : filtro.trim().toLowerCase();
+        switch (f) {
+            case "a":
+                sql = "SELECT id, enunciado, data_inicio, data_fim, codigo_acesso " +
+                        "FROM pergunta " +
+                        "WHERE datetime(data_inicio) <= datetime('now') AND datetime(data_fim) >= datetime('now') " +
+                        "ORDER BY id";
+                break;
+            case "f":
+                sql = "SELECT id, enunciado, data_inicio, data_fim, codigo_acesso " +
+                        "FROM pergunta " +
+                        "WHERE datetime(data_inicio) > datetime('now') " +
+                        "ORDER BY id";
+                break;
+            case "e":
+                sql = "SELECT id, enunciado, data_inicio, data_fim, codigo_acesso " +
+                        "FROM pergunta " +
+                        "WHERE datetime(data_fim) < datetime('now') " +
+                        "ORDER BY id";
+                break;
+            default:
+                sql = "SELECT id, enunciado, data_inicio, data_fim, codigo_acesso " +
+                        "FROM pergunta ORDER BY id";
+        }
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                lista.add(Map.of(
+                        "id", rs.getInt("id"),
+                        "enunciado", rs.getString("enunciado"),
+                        "data_inicio", rs.getString("data_inicio"),
+                        "data_fim", rs.getString("data_fim"),
+                        "codigo_acesso", rs.getString("codigo_acesso")
+                ));
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return lista;
+    }
 
 
 
