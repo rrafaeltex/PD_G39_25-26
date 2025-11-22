@@ -31,11 +31,16 @@ public class Database {
                 stmt.execute("""
                     CREATE TABLE IF NOT EXISTS config (
                         key TEXT PRIMARY KEY,
-                        value TEXT NOT NULL
+                        value TEXT NOT NULL,
+                        docente_hash TEXT NOT NULL
                     )
                 """);
 
-                stmt.execute("INSERT INTO config (key, value) VALUES ('db_version', '0');");
+                String codigoDocente = "DOC2025";
+                String hash = HashUtil.hash(codigoDocente);
+
+                stmt.execute("INSERT INTO config (key, value, docente_hash) VALUES ('db_version', '0', '" + hash + "');");
+
 
                 createSchema(stmt);
 
@@ -139,6 +144,74 @@ public class Database {
         } catch (SQLException e) {
             System.err.println("Erro ao registar docente: " + e.getMessage());
             return false;
+        }
+    }
+
+    public static String criarPergunta(int docenteId, String enunciado,
+                                      String dataInicio, String dataFim,
+                                      java.util.List<Map<String, Object>> opcoes) {
+
+        String codigoAcesso;
+
+        // 1. Gerar código único
+        while (true) {
+            codigoAcesso = CodeGenerator.generateCode(6);
+            try (Connection conn = DriverManager.getConnection(url());
+                 PreparedStatement ps = conn.prepareStatement(
+                         "SELECT COUNT(*) FROM pergunta WHERE codigo_acesso=?")) {
+
+                ps.setString(1, codigoAcesso);
+                ResultSet rs = ps.executeQuery();
+                if (rs.next() && rs.getInt(1) == 0)
+                    break;
+
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+
+        try (Connection conn = DriverManager.getConnection(url())) {
+            conn.setAutoCommit(false);
+
+            // 2. Inserir pergunta
+            int perguntaId;
+            try (PreparedStatement ps = conn.prepareStatement("""
+            INSERT INTO pergunta (docente_id, enunciado, data_inicio, data_fim, codigo_acesso)
+            VALUES (?, ?, ?, ?, ?)
+        """, Statement.RETURN_GENERATED_KEYS)) {
+
+                ps.setInt(1, docenteId);
+                ps.setString(2, enunciado);
+                ps.setString(3, dataInicio);
+                ps.setString(4, dataFim);
+                ps.setString(5, codigoAcesso);
+                ps.executeUpdate();
+
+                ResultSet keys = ps.getGeneratedKeys();
+                keys.next();
+                perguntaId = keys.getInt(1);
+            }
+
+            // 3. Inserir opções
+            for (Map<String, Object> op : opcoes) {
+                try (PreparedStatement ps = conn.prepareStatement("""
+                INSERT INTO opcao (pergunta_id, letra, texto, correta)
+                VALUES (?, ?, ?, ?)
+            """)) {
+                    ps.setInt(1, perguntaId);
+                    ps.setString(2, (String) op.get("letra"));
+                    ps.setString(3, (String) op.get("texto"));
+                    ps.setBoolean(4, (Boolean) op.get("correta"));
+                    ps.executeUpdate();
+                }
+            }
+
+            conn.commit();
+            return codigoAcesso;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
@@ -251,5 +324,60 @@ public class Database {
 
     public static String getPath() {
         return dbPath;
+    }
+
+    public static boolean validarCodigoDocente(String codigoInserido) {
+        String hashInserido = HashUtil.hash(codigoInserido);
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT docente_hash FROM config WHERE key='db_version'")) {
+
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                String hashGuardado = rs.getString("docente_hash");
+                return hashInserido.equals(hashGuardado);
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return false;
+    }
+
+
+    public static int getId(String perfil, String email) throws SQLException {
+        try (Connection conn = DriverManager.getConnection(url())) {
+
+            if (perfil.equalsIgnoreCase("s")) {
+
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT numero FROM estudante WHERE email=?")) {
+
+                    ps.setString(1, email);
+                    ResultSet rs = ps.executeQuery();
+
+                    if (rs.next()) {
+                        return rs.getInt("numero");
+                    }
+                }
+
+            } else if (perfil.equalsIgnoreCase("d")) {
+
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT id FROM docente WHERE email=?")) {
+
+                    ps.setString(1, email);
+                    ResultSet rs = ps.executeQuery();
+
+                    if (rs.next()) {
+                        return rs.getInt("id"); // ID do docente
+                    }
+                }
+            }
+        }
+
+        return -1; // não encontrado
     }
 }

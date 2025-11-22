@@ -1,6 +1,8 @@
 package pt.isec.pd.g39.servidor;
 
 
+import java.net.InetAddress;
+
 public class MainServer {
     public static void main(String[] args) throws Exception {
 
@@ -9,8 +11,8 @@ public class MainServer {
             System.exit(1);
         }
 
-
-        String dirIp = args[0];
+        InetAddress addr = InetAddress.getByName(args[0]);
+        String dirIp = addr.getHostAddress();
         int port = Integer.parseInt(args[1]);
         String dbPath = args[2];
         String multicastLocalIp = args[3];

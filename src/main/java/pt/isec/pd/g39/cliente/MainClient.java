@@ -13,7 +13,7 @@ public class MainClient {
     private static String directoryIp;
     private static int directoryPort;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         if (args.length != 2) {
             System.out.println("Uso: java MainClient <dirIp> <dirPort>");
             System.exit(1);
@@ -22,7 +22,8 @@ public class MainClient {
         São lançados fornecendo o endereço e o porto de escuta UDP do serviço de diretoria
         através da linha de comando.
         */
-        directoryIp = args[0];
+        InetAddress addr = InetAddress.getByName(args[0]);
+        directoryIp = addr.getHostAddress();
         directoryPort = Integer.parseInt(args[1]);
 
         ClientComms clientComms = new ClientComms(directoryIp, directoryPort);

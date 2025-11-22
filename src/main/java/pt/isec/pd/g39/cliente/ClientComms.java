@@ -9,6 +9,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -21,6 +22,9 @@ public class ClientComms {
 
     private final Gson gson = new Gson();
     private static final long LOGIN_TIME = 30_000L;
+    
+    boolean isDocente = false;
+    int idUser;
 
     public ClientComms(String directoryIp, int directoryPort) {
         this.directoryIp = directoryIp;
@@ -29,53 +33,77 @@ public class ClientComms {
 
     public void start() throws IOException {
         getTCP();
+
         boolean done = false;
+
         Scanner scanner = new Scanner(System.in);
-        while (!done) {
-            System.out.println("Registo ou Login?");
-            String choice = scanner.nextLine().trim().toLowerCase();
+        System.out.println("Registo ou Login?");
+        String choice = scanner.nextLine().trim().toLowerCase();
         /*
         Depois, começam por solicitar o email e a password ao utilizador para efeitos de
         autenticação, ou o conjunto de dados necessários ao registo de um novo utilizador. Posteriomente,
         a aplicação ira retirar estes dados da UI
          */
-            if (choice.equals("login")) {
-                runLoginSession(scanner);
-                done = true;
-            } else if (choice.equals("registo")) {
-                System.out.print("Email: ");
-                String email = scanner.nextLine().trim();
-                System.out.print("Password: ");
-                String password = scanner.nextLine().trim();
-                System.out.print("Nome: ");
-                String nome = scanner.nextLine().trim();
-                System.out.print("Estudante (S) ou Docente (D)? ");
-                String role = scanner.nextLine().trim().toLowerCase();
-                String msg;
-                if (role.equals("s")) {
-                    msg = gson.toJson(Map.of(
-                            "type", "REGISTER_STUDENT",
-                            "nome", nome,
-                            "email", email,
-                            "password", password
-                    ));
-                } else {
-                    System.out.println("Secret Code: ");
-                    String secretCode = scanner.nextLine().trim();
-                    msg = gson.toJson(Map.of(
-                            "type", "REGISTER_TEACHER",
-                            "nome", nome,
-                            "email", email,
-                            "password", password,
-                            "secret_code", secretCode
-                    ));
-                }
-                sendSingleMessage(msg);
-                done = true;
+        if (choice.equals("login")) {
+            runLoginSession(scanner);
+            done = true;
+        } else if (choice.equals("registo")) {
+            System.out.print("Email: ");
+            String email = scanner.nextLine().trim();
+            System.out.print("Password: ");
+            String password = scanner.nextLine().trim();
+            System.out.print("Nome: ");
+            String nome = scanner.nextLine().trim();
+            System.out.print("Estudante (S) ou Docente (D)? ");
+            String role = scanner.nextLine().trim().toLowerCase();
+            String msg;
+            if (role.equals("s")) {
+                System.out.print("Numero de estudante?");
+                String n = scanner.nextLine().trim().toLowerCase();
+                msg = gson.toJson(Map.of(
+                        "type", "REGISTER_STUDENT",
+                        "nome", nome,
+                        "email", email,
+                        "password", password,
+                        "numero", n
+                ));
             } else {
-                System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
+                System.out.println("Secret Code: ");
+                String secretCode = scanner.nextLine().trim();
+                msg = gson.toJson(Map.of(
+                        "type", "REGISTER_TEACHER",
+                        "nome", nome,
+                        "email", email,
+                        "password", password,
+                        "secret_code", secretCode
+                ));
+                isDocente = true;
+            }
+            sendSingleMessage(msg);
+        } else {
+            System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
+        }
+        while (!done) {
+            System.out.println("O que fazer:");
+            System.out.println("1 -> Sair");
+            System.out.println("2 -> Criar uma pergunta(apenas docentes)");
+
+            String choice2 = scanner.nextLine().trim();
+            switch(choice2){
+                case "1":
+                    done = true;
+                    break;
+                case "2":
+                    if(isDocente){
+                        criarPergunta();
+                    }else{
+                        System.out.println("Apenas docentes podem criar perguntas.");
+                    }
+                default:
+                    done = true;
             }
         }
+        System.out.println("A terminar.");
     }
 
     private void getTCP() throws IOException {
@@ -158,8 +186,13 @@ public class ClientComms {
                 @SuppressWarnings("unchecked")
                 Map<String, Object> json = gson.fromJson(reply, Map.class);
                 String type = (String) json.get("type");
-                String message = (String) json.getOrDefault("message", "");
-
+                String message = (String) json.get("message");
+                String perfil = (String) json.get("perfil");
+                Double idDouble = (Double) json.get("id");
+                idUser = idDouble.intValue();
+                if(perfil.equals("docente")){
+                    isDocente = true;
+                }
                 if ("LOGIN_OK".equals(type)) {
                     System.out.println("Login bem-sucedido!");
                     return;
@@ -267,10 +300,16 @@ public class ClientComms {
                 Map<String, Object> json = gson.fromJson(reply, Map.class);
                 String type = (String) json.get("type");
                 String message = (String) json.getOrDefault("message", "");
+                Object idObj = json.get("id");
+
+                if (idObj != null) {
+                    idUser = ((Double) idObj).intValue();
+                }
 
                 switch (type) {
                     case "REGISTER_OK":
                         System.out.println("Registo bem-sucedido!");
+
                         return;
                     case "REGISTER_FAIL":
                         System.out.println("Falha no registo: " + message);
@@ -317,4 +356,49 @@ public class ClientComms {
         System.out.println("Operação de envio falhou após tentativas. A terminar.");
         System.exit(1);
     }
+
+    void criarPergunta() {
+        Scanner sc = new Scanner(System.in);
+
+        System.out.print("Enunciado: ");
+        String enunciado = sc.nextLine();
+
+        System.out.print("Data início (yyyy-MM-dd HH:mm): ");
+        String di = sc.nextLine();
+
+        System.out.print("Data fim (yyyy-MM-dd HH:mm): ");
+        String df = sc.nextLine();
+
+        System.out.print("Quantas opções? ");
+        int n = Integer.parseInt(sc.nextLine());
+
+        List<Map<String, Object>> opcoes = new java.util.ArrayList<>();
+
+        for (int i = 0; i < n; i++) {
+            System.out.println("Opção " + (char)('A' + i));
+            System.out.print("Texto: ");
+            String texto = sc.nextLine();
+
+            System.out.print("É a correta? (s/n): ");
+            boolean correta = sc.nextLine().trim().equalsIgnoreCase("s");
+
+            opcoes.add(Map.of(
+                    "letra", String.valueOf((char)('A' + i)),
+                    "texto", texto,
+                    "correta", correta
+            ));
+        }
+
+        String msg = gson.toJson(Map.of(
+                "type", "CREATE_QUESTION",
+                "docente_id", idUser,
+                "enunciado", enunciado,
+                "data_inicio", di,
+                "data_fim", df,
+                "opcoes", opcoes
+        ));
+
+        sendSingleMessage(msg);
+    }
+
 }

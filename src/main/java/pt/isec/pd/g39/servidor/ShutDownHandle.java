@@ -23,7 +23,7 @@ public class ShutDownHandle extends Thread {
     @Override
     public void run() {
         try {
-            // ✅ USAR MULTICAST SOCKET
+
             MulticastSocket socket = new MulticastSocket(SHUTDOWN_PORT);
             socket.joinGroup(InetAddress.getByName(MULTICAST_IP));  // ✅ JUNTAR AO GRUPO
             socket.setSoTimeout(2000);

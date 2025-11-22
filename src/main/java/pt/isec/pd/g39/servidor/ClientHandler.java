@@ -5,6 +5,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.sql.SQLException;
+import java.util.List;
 import java.util.Map;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -53,6 +55,9 @@ public class ClientHandler extends Thread {
                     case "REGISTER_TEACHER":
                         handleRegisterTeacher(request);
                         break;
+                    case "CREATE_QUESTION":
+                        handleCreateQuestion(request);
+                        break;
 
                     // Adicionar mais 'cases' para as outras funções
                     // ex: "CREATE_QUESTION", "GET_QUESTIONS", "SUBMIT_ANSWER"
@@ -100,24 +105,18 @@ public class ClientHandler extends Thread {
      * Trata de um pedido de Registo de Estudante.
      */
     //
-    private void handleRegisterStudent(Map<String, Object> request) {
+    private void handleRegisterStudent(Map<String, Object> request) throws SQLException {
         String nome = (String) request.get("nome");
         String email = (String) request.get("email");
         String password = (String) request.get("password");
-        // O cliente tem de enviar o numero de estudante também!
-        // Se o teu cliente ainda não pede número, assume um aleatório ou altera o cliente.
-        // Vamos assumir que vem no JSON como "numero":
-        // int numero = ((Double) request.get("numero")).intValue();
-
-        // Para testar rápido, vou usar o hashCode do email como número (só para não dar erro agora)
-        int numero = Math.abs(email.hashCode());
+        int numero = (int) request.get("numero");
 
         System.out.println("A registar estudante: " + nome);
 
         boolean sucesso = Database.registerEstudante(numero, nome, email, password);
 
         if (sucesso) {
-            sendResponse("REGISTER_OK", Map.of("message", "Registo efetuado!"));
+            sendResponse("REGISTER_OK", Map.of("message", "Registo efetuado!" , "id" , Database.getId("s", email)));
         } else {
             sendResponse("REGISTER_FAIL", Map.of("message", "Erro: Email ou número já existem."));
         }
@@ -126,7 +125,7 @@ public class ClientHandler extends Thread {
      * Trata de um pedido de Registo de Docente.
      */
     //
-    private void handleRegisterTeacher(Map<String, Object> request) {
+    private void handleRegisterTeacher(Map<String, Object> request) throws SQLException {
         // 1. Extrair dados do JSON
         String secretCode = (String) request.get("secret_code");
         String nome = (String) request.get("nome");
@@ -135,16 +134,15 @@ public class ClientHandler extends Thread {
 
         System.out.println("A verificar registo de docente: " + nome);
 
-        // 2. Validar Código Secreto (Hardcoded "codigo123" para já)
         // Nota: O enunciado pede que isto esteja na BD, podes adicionar à tabela 'config' mais tarde.
-        if ("codigo123".equals(secretCode)) {
+        if (Database.validarCodigoDocente(secretCode)) {
 
             // 3. Registar na Base de Dados
             // Chama a função que cria o INSERT INTO docente...
             boolean sucesso = Database.registerDocente(nome, email, password);
 
             if (sucesso) {
-                sendResponse("REGISTER_OK", Map.of("message", "Docente registado com sucesso!"));
+                sendResponse("REGISTER_OK", Map.of("message", "Docente registado com sucesso!" , "id" , Database.getId("d",email)));
             } else {
                 // Falha geralmente se o email já existir (UNIQUE constraint)
                 sendResponse("REGISTER_FAIL", Map.of("message", "Erro: Email já está em uso."));
@@ -180,6 +178,30 @@ public class ClientHandler extends Thread {
 
         // Envia o texto JSON para o cliente
         out.println(jsonResponse);
+    }
+
+    private void handleCreateQuestion(Map<String, Object> request) {
+        int docenteId = ((Double) request.get("docente_id")).intValue();
+        String enunciado = (String) request.get("enunciado");
+        String dataInicio = (String) request.get("data_inicio");
+        String dataFim = (String) request.get("data_fim");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> opcoes =
+                (List<Map<String, Object>>) request.get("opcoes");
+
+        String codigo = Database.criarPergunta(docenteId, enunciado, dataInicio, dataFim, opcoes);
+
+        if (codigo != null) {
+            sendResponse("CREATE_QUESTION_OK", Map.of(
+                    "message", "Pergunta criada com sucesso!",
+                    "codigo_acesso", codigo
+            ));
+        } else {
+            sendResponse("CREATE_QUESTION_FAIL", Map.of(
+                    "message", "Falha ao criar pergunta."
+            ));
+        }
     }
 }
 
