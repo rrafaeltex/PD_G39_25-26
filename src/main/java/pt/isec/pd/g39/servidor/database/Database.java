@@ -1,5 +1,7 @@
 package pt.isec.pd.g39.servidor.database;
 
+import pt.isec.pd.g39.servidor.HeartbeatManager;
+
 import java.io.File;
 import java.sql.*;
 import java.util.List;
@@ -150,36 +152,34 @@ public class Database {
 
     public static String criarPergunta(int docenteId, String enunciado,
                                        String dataInicio, String dataFim,
-                                       java.util.List<Map<String, Object>> opcoes) {
+                                       List<Map<String, Object>> opcoes) {
 
-        String codigoAcesso;
+        DatabaseWriteLock.waitIfLocked();
 
-        // 1. Gerar código único
-        while (true) {
-            codigoAcesso = CodeGenerator.generateCode(6);
-            try (Connection conn = DriverManager.getConnection(url());
-                 PreparedStatement ps = conn.prepareStatement(
-                         "SELECT COUNT(*) FROM pergunta WHERE codigo_acesso=?")) {
-
-                ps.setString(1, codigoAcesso);
-                ResultSet rs = ps.executeQuery();
-                if (rs.next() && rs.getInt(1) == 0)
-                    break;
-
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        }
-
-        try (Connection conn = DriverManager.getConnection(url())) {
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(url());
             conn.setAutoCommit(false);
 
-            // 2. Inserir pergunta
+            // 1) Gerar código
+            String codigoAcesso;
+            while (true) {
+                codigoAcesso = CodeGenerator.generateCode(6);
+                try (PreparedStatement ps = conn.prepareStatement(
+                        "SELECT COUNT(*) FROM pergunta WHERE codigo_acesso=?")) {
+                    ps.setString(1, codigoAcesso);
+                    ResultSet rs = ps.executeQuery();
+                    if (rs.next() && rs.getInt(1) == 0)
+                        break;
+                }
+            }
+
+            // 2) Inserir pergunta
             int perguntaId;
             try (PreparedStatement ps = conn.prepareStatement("""
-            INSERT INTO pergunta (docente_id, enunciado, data_inicio, data_fim, codigo_acesso)
-            VALUES (?, ?, ?, ?, ?)
-        """, Statement.RETURN_GENERATED_KEYS)) {
+                INSERT INTO pergunta (docente_id, enunciado, data_inicio, data_fim, codigo_acesso)
+                VALUES (?, ?, ?, ?, ?)
+                """, Statement.RETURN_GENERATED_KEYS)) {
 
                 ps.setInt(1, docenteId);
                 ps.setString(2, enunciado);
@@ -193,12 +193,12 @@ public class Database {
                 perguntaId = keys.getInt(1);
             }
 
-            // 3. Inserir opções
+            // 3) Inserir opções
             for (Map<String, Object> op : opcoes) {
                 try (PreparedStatement ps = conn.prepareStatement("""
-                INSERT INTO opcao (pergunta_id, letra, texto, correta)
-                VALUES (?, ?, ?, ?)
-            """)) {
+                    INSERT INTO opcao (pergunta_id, letra, texto, correta)
+                    VALUES (?, ?, ?, ?)
+                    """)) {
                     ps.setInt(1, perguntaId);
                     ps.setString(2, (String) op.get("letra"));
                     ps.setString(3, (String) op.get("texto"));
@@ -208,16 +208,27 @@ public class Database {
             }
 
             conn.commit();
+
+            // Agora sim, incrementa versão e envia heartbeat
+            int newVersion = getVersion() + 1;
+            setVersion(newVersion);
+
+            HeartbeatManager.sendHeartbeatWithSql(
+                    "INSERT/UPDATE PERGUNTA", newVersion
+            );
+
             return codigoAcesso;
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            try { if (conn != null) conn.rollback(); } catch (Exception ignored) {}
             return null;
         }
     }
 
-    //
-// Adiciona isto à classe Database
+
+
+
 
     public static Map<String, Object> checkLogin(String email, String password) {
         // Primeiro tenta ver se é Estudante
@@ -372,84 +383,53 @@ public class Database {
                                          String dataInicio, String dataFim,
                                          List<Map<String, Object>> novasOpcoes) {
 
-        try (Connection conn = DriverManager.getConnection(url())) {
-            conn.setAutoCommit(false);
+        DatabaseWriteLock.waitIfLocked();
+        try {
+            // update pergunta
+            String sql1 = "UPDATE pergunta SET enunciado='" + enunciado +
+                    "', data_inicio='" + dataInicio +
+                    "', data_fim='" + dataFim +
+                    "' WHERE id=" + perguntaId;
 
-            // Atualizar os dados base da pergunta
-            try (PreparedStatement ps = conn.prepareStatement("""
-                UPDATE pergunta
-                SET enunciado=?, data_inicio=?, data_fim=?
-                WHERE id=?
-        """)) {
-                ps.setString(1, enunciado);
-                ps.setString(2, dataInicio);
-                ps.setString(3, dataFim);
-                ps.setInt(4, perguntaId);
-                ps.executeUpdate();
-            }
+            executeLocalUpdate(sql1);
 
-            // Apagar opções antigas
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "DELETE FROM opcao WHERE pergunta_id=?")) {
-                ps.setInt(1, perguntaId);
-                ps.executeUpdate();
-            }
+            // apagar opções antigas
+            String sql2 = "DELETE FROM opcao WHERE pergunta_id=" + perguntaId;
+            executeLocalUpdate(sql2);
 
-            // Inserir opções novas
+            // inserir novas
             for (Map<String, Object> op : novasOpcoes) {
-                try (PreparedStatement ps = conn.prepareStatement("""
-                    INSERT INTO opcao (pergunta_id, letra, texto, correta)
-                    VALUES (?, ?, ?, ?)
-            """)) {
-                    ps.setInt(1, perguntaId);
-                    ps.setString(2, (String) op.get("letra"));
-                    ps.setString(3, (String) op.get("texto"));
-                    ps.setBoolean(4, (Boolean) op.get("correta"));
-                    ps.executeUpdate();
-                }
+                String sql3 = "INSERT INTO opcao (pergunta_id, letra, texto, correta) VALUES (" +
+                        perguntaId + ", '" + op.get("letra") + "', '" + op.get("texto") +
+                        "', " + (((Boolean) op.get("correta")) ? 1 : 0) + ")";
+                executeLocalUpdate(sql3);
             }
 
-            conn.commit();
             return true;
 
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return false;
         }
     }
+
 
     public static boolean eliminarPergunta(int perguntaId) {
+        if (perguntaTemRespostas(perguntaId))
+            return false;
 
-        // 1. Verificar se já existem respostas
-        if (perguntaTemRespostas(perguntaId)) {
-            return false; // não pode apagar
-        }
+        DatabaseWriteLock.waitIfLocked();
 
-        try (Connection conn = DriverManager.getConnection(url())) {
-            conn.setAutoCommit(false);
-
-            // 2. Apagar opções primeiro (FK)
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "DELETE FROM opcao WHERE pergunta_id=?")) {
-                ps.setInt(1, perguntaId);
-                ps.executeUpdate();
-            }
-
-            // 3. Apagar pergunta
-            try (PreparedStatement ps = conn.prepareStatement(
-                    "DELETE FROM pergunta WHERE id=?")) {
-                ps.setInt(1, perguntaId);
-                ps.executeUpdate();
-            }
-
-            conn.commit();
+        try {
+            executeLocalUpdate("DELETE FROM opcao WHERE pergunta_id=" + perguntaId);
+            executeLocalUpdate("DELETE FROM pergunta WHERE id=" + perguntaId);
             return true;
-
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return false;
         }
     }
+
 
     public static List<Map<String, Object>> listarPerguntasFiltradas(String filtro) {
         List<Map<String, Object>> lista = new java.util.ArrayList<>();
@@ -538,13 +518,20 @@ public class Database {
 
     // Usado pelo servidor principal quando um cliente faz uma operação
     public static void executeLocalUpdate(String sql) throws SQLException {
+
+        DatabaseWriteLock.waitIfLocked();
+
         try (Connection conn = DriverManager.getConnection(url());
              Statement stmt = conn.createStatement()) {
 
             stmt.executeUpdate(sql);
 
+
             int v = getVersion() + 1;
             setVersion(v);
+
+
+            HeartbeatManager.sendHeartbeatWithSql(sql,v);
         }
     }
 

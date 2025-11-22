@@ -94,6 +94,8 @@ public class ServerNode {
                 return;
             }
 
+            ClientServer.start(clientServerSocket);
+
             System.out.println("BD sincronizada com sucesso.");
         }
 
@@ -139,7 +141,14 @@ public class ServerNode {
 
             byte[] buffer = new byte[1024];
             DatagramPacket resposta = new DatagramPacket(buffer, buffer.length);
-            socket.receive(resposta);
+
+            try {
+                socket.receive(resposta);
+            } catch (SocketTimeoutException e) {
+                System.err.println("[ERRO] Diretoria não respondeu ao registo.");
+                System.exit(1);
+                return;
+            }
 
             String respostaMsg = new String(resposta.getData(), 0, resposta.getLength(), StandardCharsets.UTF_8);
 
@@ -151,14 +160,11 @@ public class ServerNode {
                 primaryTcpClients = ((Double) json.get("primary_tcp_clients")).intValue();
                 primaryTcpPeers = ((Double) json.get("primary_tcp_peers")).intValue();
 
-                //InetAddress myIp = InetAddress.getLocalHost();
-
                 if (primaryIp.equals(directoryIp) && primaryTcpClients == clientPort) {
                     becomePrimary();
                 } else {
                     isPrimary = false;
                 }
-
 
                 System.out.println(isPrimary ?
                         "Registado como servidor PRINCIPAL" :
@@ -167,12 +173,15 @@ public class ServerNode {
                 return;
             }
 
-            throw new IOException("Resposta inesperada da diretoria: " + json.get("type"));
+            System.err.println("[ERRO] Resposta inesperada da diretoria.");
+            System.exit(1);
 
         } catch (Exception e) {
-            throw new IOException("Erro ao registar no diretoria: " + e.getMessage());
+            System.err.println("[ERRO] Falha ao registar no serviço de diretoria: " + e.getMessage());
+            System.exit(1);
         }
     }
+
 
 
     private void informarDiretoriaFalha() {

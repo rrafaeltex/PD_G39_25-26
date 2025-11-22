@@ -29,7 +29,10 @@ public class ClientHandler extends Thread {
 
     @Override
     public void run() {
+
+
         try {
+            socket.setSoTimeout(30_000);
             // 1. Preparar os canais de comunicação (Texto)
             this.out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
             this.in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -47,7 +50,7 @@ public class ClientHandler extends Thread {
                 switch (type) {
                     case "LOGIN":
                         handleLogin(request);
-                        break;
+                        return;
 
                     case "REGISTER_STUDENT":
                         handleRegisterStudent(request);
@@ -89,13 +92,12 @@ public class ClientHandler extends Thread {
                 }
             }
 
+        } catch (SocketTimeoutException e) {
+            System.out.println("[SERVER] Cliente não enviou credenciais em 30 segundos. Ligação encerrada.");
         } catch (Exception e) {
             System.err.println("[CLIENT " + socket.getPort() + "] Cliente desligou-se: " + e.getMessage());
         } finally {
-            // Limpar (fechar o socket)
-            try {
-                socket.close();
-            } catch (Exception ignored) {}
+            try { socket.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -119,6 +121,8 @@ public class ClientHandler extends Thread {
             sendResponse("LOGIN_OK", responseData);
         } else {
             sendResponse("LOGIN_FAIL", Map.of("message", "Email ou password errados"));
+
+            try { socket.close(); } catch (Exception ignored) {}
         }
     }
 
@@ -140,6 +144,8 @@ public class ClientHandler extends Thread {
             sendResponse("REGISTER_OK", Map.of("message", "Registo efetuado!" , "id" , Database.getId("s", email)));
         } else {
             sendResponse("REGISTER_FAIL", Map.of("message", "Erro: Email ou número já existem."));
+
+            try { socket.close(); } catch (Exception ignored) {}
         }
     }
     /**
@@ -164,13 +170,18 @@ public class ClientHandler extends Thread {
 
             if (sucesso) {
                 sendResponse("REGISTER_OK", Map.of("message", "Docente registado com sucesso!" , "id" , Database.getId("d",email)));
+
             } else {
                 // Falha geralmente se o email já existir (UNIQUE constraint)
                 sendResponse("REGISTER_FAIL", Map.of("message", "Erro: Email já está em uso."));
+
+                try { socket.close(); } catch (Exception ignored) {}
             }
 
         } else {
             sendResponse("REGISTER_FAIL", Map.of("message", "Código de acesso de docente inválido!"));
+
+            try { socket.close(); } catch (Exception ignored) {}
         }
     }
 

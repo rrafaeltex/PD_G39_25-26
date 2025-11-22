@@ -232,4 +232,7 @@ public class HeartbeatManager {
             System.err.println("[HB-RECV] Erro ao processar heartbeat multicast: " + e.getMessage());
         }
     }
+
+
+
 }

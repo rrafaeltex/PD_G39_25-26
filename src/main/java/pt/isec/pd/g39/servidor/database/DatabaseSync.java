@@ -51,17 +51,28 @@ public class DatabaseSync {
 
             while (true) {
                 try {
-
+                    // 1) Aceitar ligação de um secundário
                     var socket = peerServerSocket.accept();
                     var out = socket.getOutputStream();
 
-                    String dbPath = Database.getPath();
-                    File f = new File(dbPath);
+                    // 2) BLOQUEAR ESCRITAS ENQUANTO COPIAMOS A BD
+                    DatabaseWriteLock.lock();
+                    try {
+                        String dbPath = Database.getPath();
+                        File f = new File(dbPath);
 
-                    out.write(longToBytes(f.length()));
+                        // Enviar tamanho
+                        out.write(longToBytes(f.length()));
 
-                    try (var fis = new java.io.FileInputStream(f)) {
-                        fis.transferTo(out);
+                        // Enviar conteúdo
+                        try (var fis = new java.io.FileInputStream(f)) {
+                            fis.transferTo(out);
+                        }
+
+                        System.out.println("[PRIMARY] Sincronização concluída — desbloqueando escritas.");
+                    } finally {
+                        // 3) DESBLOQUEAR SEMPRE MESMO SE DER ERRO A MEIO
+                        DatabaseWriteLock.unlock();
                     }
 
                     socket.close();
@@ -73,6 +84,7 @@ public class DatabaseSync {
 
         }).start();
     }
+
 
 
     private static byte[] longToBytes(long x) {

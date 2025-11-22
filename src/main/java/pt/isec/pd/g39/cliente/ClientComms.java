@@ -130,12 +130,16 @@ public class ClientComms {
             } else {
                 System.out.println("O que fazer:");
                 System.out.println("1 -> Sair");
+                System.out.println("2 -> Responder a uma pergunta");
 
                 String choice2 = scanner.nextLine().trim();
                 switch (choice2) {
                     case "1":
                         done = true;
                         break;
+                    case "2":
+                         //responderPergunta();
+                         break;
                     default:
                         System.out.println("Opção inválida. A voltar ao menu.");
                 }
@@ -536,7 +540,7 @@ public class ClientComms {
                         System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
                         previousIp = ipServer;
                         previousPort = tcpPortServer;
-                        break;
+                        continue;
                     case RETRY_AFTER_WAIT:
                         waitedOnce = true;
                         break;
@@ -707,4 +711,6 @@ public class ClientComms {
                 return false;
         }
     }
+
+
 }
