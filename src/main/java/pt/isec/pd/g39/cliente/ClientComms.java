@@ -229,6 +229,90 @@ public class ClientComms {
         }
 
         System.out.println("\nPercentagem de corretas: " + percentagem + "%");
+
+        System.out.println("============================\n");
+        System.out.println("Deseja exportar a pergunta para um ficheiro CSV? (s/n):");
+        String exportChoice = sc.nextLine().trim().toLowerCase();
+        while(true){
+            if(exportChoice.equals("s") || exportChoice.equals("n")){
+                break;
+            }else{
+                System.out.println("Opção inválida. Introduza 's' para sim ou 'n' para não:");
+                exportChoice = sc.nextLine().trim().toLowerCase();
+            }
+        }
+
+        if(exportChoice.equals("s")){
+            try {
+                java.nio.file.Path resourcesDir = java.nio.file.Paths.get("src", "main", "resources");
+                java.util.function.Function<String, String> esc = s -> {
+                    if (s == null) return "";
+                    return s.replace("\"", "\"\"");
+                };
+
+                String dataInicioStr = (String) pergunta.get("data_inicio");
+                String dataFimStr = (String) pergunta.get("data_fim");
+                String dia = "";
+                String horaIni = "";
+                String horaFim = "";
+                if (dataFimStr != null) {
+                    String[] parts = dataFimStr.split(" ");
+                    if (parts.length >= 2) horaFim = parts[1];
+                }
+                String enunciadoPerg = (String) pergunta.get("enunciado");
+                if (dataInicioStr != null) {
+                    String[] parts = dataInicioStr.split(" ");
+                    if (parts.length >= 2) {
+                        dia = parts[0];
+                        horaIni = parts[1];
+                    }
+                }
+                String opcaoCerta = "";
+                for (Map<String, Object> op : opcoes) {
+                    Object corObj = op.get("correta");
+                    boolean correta = corObj instanceof Boolean ? (Boolean) corObj : Boolean.TRUE.equals(corObj);
+                    if (correta) {
+                        opcaoCerta = String.valueOf(op.get("letra"));
+                        break;
+                    }
+                }
+
+                String perguntaIdStr = String.valueOf(pergunta.get("id"));
+                java.nio.file.Path file = resourcesDir.resolve("pergunta_" + perguntaIdStr + ".csv");
+
+                try (java.io.BufferedWriter writer = java.nio.file.Files.newBufferedWriter(file, java.nio.charset.StandardCharsets.UTF_8)) {
+                    writer.write("\"dia\";\"hora inicial\";\"hora final\";\"enunciado da pergunta\";\"opção certa\"");
+                    writer.newLine();
+                    writer.write("\"" + esc.apply(dia) + "\";\"" + esc.apply(horaIni) + "\";\"" + esc.apply(horaFim) + "\";\"" + esc.apply(enunciadoPerg) + "\";\"" + esc.apply(opcaoCerta) + "\"");
+                    writer.newLine();
+                    writer.newLine();
+
+                    writer.write("\"opção\";\"texto da opção\"");
+                    writer.newLine();
+                    for (Map<String, Object> op : opcoes) {
+                        String letra = String.valueOf(op.get("letra"));
+                        String texto = String.valueOf(op.get("texto"));
+                        writer.write(letra + ";\"" + esc.apply(texto) + "\"");
+                        writer.newLine();
+                    }
+                    writer.newLine();
+
+                    writer.write("\"número de estudante\";\"nome\";\"e-mail\";\"resposta\"");
+                    writer.newLine();
+                    for (Map<String, Object> r : respostas) {
+                        String numero = String.valueOf(r.get("numero"));
+                        String nome = String.valueOf(r.get("nome"));
+                        String email = String.valueOf(r.get("email"));
+                        String respostaGiven = String.valueOf(r.get("opcao_escolhida"));
+                        writer.write("\"" + esc.apply(numero) + "\";\"" + esc.apply(nome) + "\";\"" + esc.apply(email) + "\";\"" + esc.apply(respostaGiven) + "\"");
+                        writer.newLine();
+                    }
+                }
+                System.out.println("Pergunta exportada para: " + file.toAbsolutePath());
+            } catch (Exception e) {
+                System.err.println("Erro ao exportar a pergunta: " + e.getMessage());
+            }
+        }
     }
 
 
