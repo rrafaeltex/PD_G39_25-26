@@ -106,6 +106,7 @@ public class ClientComms {
                 System.out.println("3 -> Editar Pergunta");
                 System.out.println("4 -> Eliminar Perguntas");
                 System.out.println("5 -> Listar Perguntas c/Filtro (Ativas/Futuras/Expiradas)");
+                System.out.println("6 -> Ver respostas de perguntas expiradas");
 
                 String choice2 = scanner.nextLine().trim();
                 switch (choice2) {
@@ -124,6 +125,9 @@ public class ClientComms {
                     case "5":
                         consultarPerguntas();
                         break;
+                    case "6":
+                        consultarRespostaPerguntaExpirada();
+                        break;
                     default:
                         System.out.println("Opção inválida. A voltar ao menu.");
                 }
@@ -131,6 +135,7 @@ public class ClientComms {
                 System.out.println("O que fazer:");
                 System.out.println("1 -> Sair");
                 System.out.println("2 -> Responder a uma pergunta");
+                System.out.println("3 -> Consultar perguntas respondidas(expiradas)");
 
                 String choice2 = scanner.nextLine().trim();
                 switch (choice2) {
@@ -140,12 +145,90 @@ public class ClientComms {
                     case "2":
                          responderPergunta();
                          break;
+                         case "3":
+                             consultarPerguntasExpiradas();
+                             break;
                     default:
                         System.out.println("Opção inválida. A voltar ao menu.");
                 }
             }
         }
         System.out.println("A terminar.");
+    }
+
+    private void consultarRespostaPerguntaExpirada() {
+        Scanner sc = new Scanner(System.in);
+
+        // Primeiro listar as perguntas do docente que já expiraram
+        System.out.println("A obter perguntas expiradas...");
+
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTIONS_FILTER",
+                "filtro", "e" // usar filtro expiradas
+        ));
+
+        Map<String, Object> resposta = sendAndReceive(msg);
+
+        List<Map<String, Object>> perguntas =
+                (List<Map<String, Object>>) resposta.get("perguntas");
+
+        if (perguntas.isEmpty()) {
+            System.out.println("Não existem perguntas expiradas.");
+            return;
+        }
+
+        System.out.println("\nPerguntas expiradas:");
+        for (int i = 0; i < perguntas.size(); i++) {
+            System.out.println(i + " -> " + perguntas.get(i).get("enunciado"));
+        }
+
+        System.out.print("Escolha a pergunta: ");
+        int escolha = Integer.parseInt(sc.nextLine());
+
+        int perguntaId = ((Double) perguntas.get(escolha).get("id")).intValue();
+
+        // Agora pedir ao servidor todas as respostas
+        msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTION_ANSWERS",
+                "pergunta_id", perguntaId
+        ));
+
+        resposta = sendAndReceive(msg);
+
+        if (!"LIST_QUESTION_ANSWERS_OK".equals(resposta.get("type"))) {
+            System.out.println("Erro: " + resposta.get("message"));
+            return;
+        }
+
+        Map<String, Object> pergunta = (Map<String, Object>) resposta.get("pergunta");
+        List<Map<String, Object>> opcoes = (List<Map<String, Object>>) resposta.get("opcoes");
+        List<Map<String, Object>> respostas = (List<Map<String, Object>>) resposta.get("respostas");
+        double percentagem = (Double) resposta.get("percentagem_certas");
+
+        System.out.println("\n============================");
+        System.out.println("Enunciado: " + pergunta.get("enunciado"));
+        System.out.println("Início: " + pergunta.get("data_inicio"));
+        System.out.println("Fim: " + pergunta.get("data_fim"));
+
+        System.out.println("\nOpções:");
+        for (Map<String, Object> op : opcoes) {
+            boolean correta = (Boolean) op.get("correta");
+
+            System.out.println(op.get("letra") + ") " + op.get("texto") +
+                    (correta ? " (correta)" : ""));
+        }
+
+        System.out.println("\nRespostas submetidas:");
+        for (Map<String, Object> r : respostas) {
+            System.out.println("---------------------");
+            System.out.println("Estudante: " + r.get("numero") + " | " + r.get("nome"));
+            System.out.println("Email: " + r.get("email"));
+            System.out.println("Resposta: " + r.get("opcao_escolhida"));
+            System.out.println("Correta?: " + (((Boolean) r.get("correta")) ? "SIM" : "NÃO"));
+            System.out.println("Data: " + r.get("data_resposta"));
+        }
+
+        System.out.println("\nPercentagem de corretas: " + percentagem + "%");
     }
 
 
@@ -787,6 +870,44 @@ public class ClientComms {
             case GIVE_UP:
             default:
                 return false;
+        }
+    }
+
+
+    private void  consultarPerguntasExpiradas(){
+        Scanner sc = new Scanner(System.in);
+
+        System.out.print("Filtrar por data (ENTER para ignorar): ");
+        String filtro = sc.nextLine();
+
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_ANSWERED_EXPIRED",
+                "aluno_id", idUser,
+                "filtro_data", filtro
+        ));
+
+        Map<String, Object> resposta = sendAndReceive(msg);
+
+        if(!"LIST_ANSWERED_EXPIRED_OK".equals(resposta.get("type"))){
+            System.out.println("Erro ao obter perguntas expiradas.");
+            return;
+        }
+
+        List<Map<String, Object>> perguntas =
+                (List<Map<String, Object>>) resposta.get("perguntas");
+
+        if(perguntas.isEmpty()){
+            System.out.println("Nenhuma pergunta expirou ou ainda não respondeu a nenhuma.");
+            return;
+        }
+
+        for(Map<String, Object> p : perguntas){
+            System.out.println("-----");
+            System.out.println("Pergunta: " + p.get("enunciado"));
+            System.out.println("Data fim: " + p.get("data_fim"));
+            System.out.println("Resposta dada: " + p.get("resposta_dada"));
+            System.out.println("Correta?: " + (((Boolean)p.get("correta")) ? "SIM" : "Não"));
+            System.out.println("Data resposta: " + p.get("data_resposta"));
         }
     }
 

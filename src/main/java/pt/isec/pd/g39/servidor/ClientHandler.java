@@ -91,6 +91,14 @@ public class ClientHandler extends Thread {
                         handleSubmitAnswer(request);
                         break;
 
+                    case"LIST_ANSWERED_EXPIRED":
+                        handleListAnsweredExpired(request);
+                        break;
+
+                    case"LIST_QUESTION_ANSWERS":
+                        handleListQuestionAnswers(request);
+                        break;
+
                     default:
                         sendResponse("ERROR", Map.of("message", "Tipo de pedido desconhecido: " + type));
                         break;
@@ -104,6 +112,21 @@ public class ClientHandler extends Thread {
         } finally {
             try { socket.close(); } catch (Exception ignored) {}
         }
+    }
+
+    private void handleListQuestionAnswers(Map<String, Object> request) {
+        int perguntaId = ((Double) request.get("pergunta_id")).intValue();
+
+        Map<String, Object> dados = Database.listarRespostasPerguntaExpirada(perguntaId);
+
+        if (dados == null) {
+            sendResponse("LIST_QUESTION_ANSWERS_FAIL", Map.of(
+                    "message", "Pergunta não encontrada ou ainda não expirou."
+            ));
+            return;
+        }
+
+        sendResponse("LIST_QUESTION_ANSWERS_OK", dados);
     }
 
     /**
@@ -346,6 +369,18 @@ public class ClientHandler extends Thread {
         List<Map<String, Object>> perguntas = Database.listarPerguntasFiltradas(filtro);
 
         sendResponse("LIST_QUESTIONS_FILTER_OK", Map.of("perguntas", perguntas));
+    }
+
+
+    private void handleListAnsweredExpired(Map<String, Object> request) {
+        int alunoId = ((Double) request.get("aluno_id")).intValue();
+        String filtroData = (String) request.getOrDefault("filtro_data", null);
+
+        List<Map<String, Object>> lista = Database.listarPerguntasRespondidasExpiradas(alunoId, filtroData);
+
+        sendResponse("LIST_ANSWERED_EXPIRED_OK", Map.of("perguntas", lista));
+
+        System.out.println("RESPONDI EXPIRADAS -> " + gson.toJson(lista));
     }
 
 }

@@ -5,6 +5,7 @@ import pt.isec.pd.g39.servidor.HeartbeatManager;
 import java.io.File;
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -481,6 +482,173 @@ public class Database {
 
 
 
+    public static List<Map<String, Object>> listarPerguntasRespondidasExpiradas(int alunoId, String filtroData) {
+        List<Map<String, Object>> lista = new ArrayList<>();
+
+        StringBuilder sql = new StringBuilder("""
+        SELECT 
+            p.id AS pergunta_id,
+            p.enunciado,
+            p.data_inicio,
+            p.data_fim,
+            r.opcao_escolhida,
+            r.data_resposta,
+            o.correta AS resposta_certa
+        FROM pergunta p
+        JOIN resposta r ON p.id = r.pergunta_id
+        JOIN opcao o 
+            ON o.pergunta_id = p.id
+           AND o.letra = r.opcao_escolhida
+        WHERE r.estudante_numero = ?
+          AND datetime(p.data_fim) < datetime('now')
+    """);
+
+        // Se o aluno quiser filtrar por data (ex: "2025-01-05")
+        if (filtroData != null && !filtroData.isBlank()) {
+            sql.append(" AND r.data_resposta LIKE ? ");
+        }
+
+        sql.append(" ORDER BY r.data_resposta DESC");
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+
+            ps.setInt(1, alunoId);
+
+            if (filtroData != null && !filtroData.isBlank()) {
+                ps.setString(2, "%" + filtroData + "%");
+            }
+
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                lista.add(Map.of(
+                        "id", rs.getInt("pergunta_id"),
+                        "enunciado", rs.getString("enunciado"),
+                        "data_inicio", rs.getString("data_inicio"),
+                        "data_fim", rs.getString("data_fim"),
+                        "resposta_dada", rs.getString("opcao_escolhida"),
+                        "correta", rs.getBoolean("resposta_certa"),
+                        "data_resposta", rs.getString("data_resposta")
+                ));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return lista;
+    }
+
+
+    public static Map<String, Object> listarRespostasPerguntaExpirada(int perguntaId) {
+
+        String sqlPergunta = """
+        SELECT id, enunciado, data_inicio, data_fim
+        FROM pergunta
+        WHERE id = ?
+          AND datetime(data_fim) < datetime('now')
+    """;
+
+        String sqlOpcoes = """
+        SELECT letra, texto, correta
+        FROM opcao
+        WHERE pergunta_id = ?
+        ORDER BY letra
+    """;
+
+        String sqlRespostas = """
+        SELECT r.opcao_escolhida,
+               r.data_resposta,
+               e.numero,
+               e.nome,
+               e.email
+        FROM resposta r
+        JOIN estudante e ON e.numero = r.estudante_numero
+        WHERE r.pergunta_id = ?
+        ORDER BY r.data_resposta
+    """;
+
+        try (Connection conn = DriverManager.getConnection(url())) {
+
+            // 1. Buscar dados da pergunta
+            Map<String, Object> pergunta = new HashMap<>();
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlPergunta)) {
+                ps.setInt(1, perguntaId);
+                ResultSet rs = ps.executeQuery();
+
+                if (!rs.next())
+                    return null; // Não existe ou não expirou
+
+                pergunta.put("id", rs.getInt("id"));
+                pergunta.put("enunciado", rs.getString("enunciado"));
+                pergunta.put("data_inicio", rs.getString("data_inicio"));
+                pergunta.put("data_fim", rs.getString("data_fim"));
+            }
+
+            // 2. Buscar opções
+            List<Map<String, Object>> opcoes = new ArrayList<>();
+            try (PreparedStatement ps = conn.prepareStatement(sqlOpcoes)) {
+                ps.setInt(1, perguntaId);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    opcoes.add(Map.of(
+                            "letra", rs.getString("letra"),
+                            "texto", rs.getString("texto"),
+                            "correta", rs.getBoolean("correta")
+                    ));
+                }
+            }
+
+            // 3. Buscar respostas
+            List<Map<String, Object>> respostas = new ArrayList<>();
+            int total = 0;
+            int certas = 0;
+
+            try (PreparedStatement ps = conn.prepareStatement(sqlRespostas)) {
+                ps.setInt(1, perguntaId);
+                ResultSet rs = ps.executeQuery();
+
+                while (rs.next()) {
+                    total++;
+
+                    // Verificar se é correta
+                    boolean correta = false;
+                    for (Map<String, Object> op : opcoes) {
+                        if (op.get("letra").equals(rs.getString("opcao_escolhida"))) {
+                            correta = (Boolean) op.get("correta");
+                            break;
+                        }
+                    }
+                    if (correta) certas++;
+
+                    respostas.add(Map.of(
+                            "numero", rs.getInt("numero"),
+                            "nome", rs.getString("nome"),
+                            "email", rs.getString("email"),
+                            "opcao_escolhida", rs.getString("opcao_escolhida"),
+                            "correta", correta,
+                            "data_resposta", rs.getString("data_resposta")
+                    ));
+                }
+            }
+
+            double percentagem = total == 0 ? 0.0 : (certas * 100.0 / total);
+
+            return Map.of(
+                    "pergunta", pergunta,
+                    "opcoes", opcoes,
+                    "respostas", respostas,
+                    "total_respostas", total,
+                    "percentagem_certas", percentagem
+            );
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
 
 
 
