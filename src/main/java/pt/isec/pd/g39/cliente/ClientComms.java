@@ -138,7 +138,7 @@ public class ClientComms {
                         done = true;
                         break;
                     case "2":
-                         //responderPergunta();
+                         responderPergunta();
                          break;
                     default:
                         System.out.println("Opção inválida. A voltar ao menu.");
@@ -355,6 +355,84 @@ public class ClientComms {
         System.out.println("Operação de envio falhou após tentativas. A terminar.");
         System.exit(1);
     }
+
+    //
+
+    private void responderPergunta() {
+        Scanner sc = new Scanner(System.in);
+
+        // 1. Pedir o código
+        System.out.print("\nIntroduza o código da pergunta (ex: 9H45G1): ");
+        String codigo = sc.nextLine().trim();
+
+        if (codigo.isEmpty()) return;
+
+        // 2. Enviar pedido ao servidor
+        String msg = gson.toJson(Map.of(
+                "type", "GET_QUESTION_BY_CODE",
+                "codigo", codigo,
+                "aluno_id", idUser // Enviamos o ID do aluno para verificar se já respondeu
+        ));
+
+        Map<String, Object> resposta = sendAndReceive(msg);
+
+        // 3. Verificar Erros
+        if (!"GET_QUESTION_OK".equals(resposta.get("type"))) {
+            String erro = (String) resposta.getOrDefault("message", "Erro desconhecido.");
+            System.out.println("Erro: " + erro);
+            return;
+        }
+
+        // 4. Mostrar a Pergunta
+        String enunciado = (String) resposta.get("enunciado");
+        int perguntaId = ((Double) resposta.get("id")).intValue();
+        List<Map<String, String>> opcoes = (List<Map<String, String>>) resposta.get("opcoes");
+
+        System.out.println("\n========================================");
+        System.out.println("PERGUNTA: " + enunciado);
+        System.out.println("========================================");
+
+        for (Map<String, String> op : opcoes) {
+            System.out.println("[" + op.get("letra") + "] " + op.get("texto"));
+        }
+
+        // 5. Escolher a resposta
+        String escolha;
+        while (true) {
+            System.out.print("\nA sua resposta (letra): ");
+            escolha = sc.nextLine().trim().toUpperCase();
+
+            // Validação simples para ver se a letra existe nas opções
+            boolean valida = false;
+            for (Map<String, String> op : opcoes) {
+                if (op.get("letra").equalsIgnoreCase(escolha)) {
+                    valida = true;
+                    break;
+                }
+            }
+
+            if (valida) break;
+            System.out.println("Opção inválida. Tente novamente.");
+        }
+
+        // 6. Submeter Resposta
+        String msgSubmit = gson.toJson(Map.of(
+                "type", "SUBMIT_ANSWER",
+                "aluno_id", idUser,
+                "pergunta_id", perguntaId,
+                "opcao", escolha
+        ));
+
+        Map<String, Object> respostaSubmit = sendAndReceive(msgSubmit);
+
+        if ("SUBMIT_ANSWER_OK".equals(respostaSubmit.get("type"))) {
+            System.out.println(" " + respostaSubmit.get("message"));
+        } else {
+            System.out.println("Erro " + respostaSubmit.get("message"));
+        }
+    }
+
+
 
     private void criarPergunta() {
         Scanner sc = new Scanner(System.in);

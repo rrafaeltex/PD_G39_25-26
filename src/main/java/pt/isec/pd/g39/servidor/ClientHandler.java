@@ -83,8 +83,13 @@ public class ClientHandler extends Thread {
                         handleListFilterQuestions(request);
                         break;
 
-                    // Adicionar mais 'cases' para as outras funções
-                    // ex: "CREATE_QUESTION", "GET_QUESTIONS", "SUBMIT_ANSWER"
+                    case "GET_QUESTION_BY_CODE":
+                        handleGetQuestionByCode(request);
+                        break;
+
+                    case "SUBMIT_ANSWER":
+                        handleSubmitAnswer(request);
+                        break;
 
                     default:
                         sendResponse("ERROR", Map.of("message", "Tipo de pedido desconhecido: " + type));
@@ -211,6 +216,51 @@ public class ClientHandler extends Thread {
         // Envia o texto JSON para o cliente
         out.println(jsonResponse);
     }
+
+
+    //
+
+    private void handleGetQuestionByCode(Map<String, Object> request) {
+        String codigo = (String) request.get("codigo");
+
+        // O Gson converte números para Double por defeito, por isso fazemos o cast
+        int alunoIdCheck = ((Double) request.get("aluno_id")).intValue();
+
+        System.out.println("Aluno " + alunoIdCheck + " a pedir pergunta: " + codigo);
+
+        // 1. Buscar pergunta ativa
+        Map<String, Object> perguntaAtiva = Database.getPerguntaAtivaPorCodigo(codigo);
+
+        if (perguntaAtiva == null) {
+            sendResponse("GET_QUESTION_FAIL", Map.of("message", "Pergunta não encontrada ou fora do horário."));
+            return;
+        }
+
+        // 2. Verificar se já respondeu
+        int pId = (int) perguntaAtiva.get("id");
+        if (Database.jaRespondeu(alunoIdCheck, pId)) {
+            sendResponse("GET_QUESTION_FAIL", Map.of("message", "Já respondeste a esta pergunta!"));
+        } else {
+            sendResponse("GET_QUESTION_OK", perguntaAtiva);
+        }
+    }
+
+    private void handleSubmitAnswer(Map<String, Object> request) {
+        int alunoId = ((Double) request.get("aluno_id")).intValue();
+        int perguntaId = ((Double) request.get("pergunta_id")).intValue();
+        String opcao = (String) request.get("opcao");
+
+        System.out.println("Aluno " + alunoId + " submeteu resposta: " + opcao);
+
+        boolean registado = Database.registarResposta(alunoId, perguntaId, opcao);
+
+        if (registado) {
+            sendResponse("SUBMIT_ANSWER_OK", Map.of("message", "Resposta submetida com sucesso!"));
+        } else {
+            sendResponse("SUBMIT_ANSWER_FAIL", Map.of("message", "Erro ao gravar resposta."));
+        }
+    }
+
 
     private void handleCreateQuestion(Map<String, Object> request) {
         int docenteId = ((Double) request.get("docente_id")).intValue();

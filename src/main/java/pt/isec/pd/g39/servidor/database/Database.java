@@ -4,6 +4,7 @@ import pt.isec.pd.g39.servidor.HeartbeatManager;
 
 import java.io.File;
 import java.sql.*;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -603,4 +604,135 @@ public class Database {
 
         return -1; // não encontrado
     }
+
+
+
+    //
+
+    public static Map<String, Object> getPerguntaAtivaPorCodigo(String codigo) {
+        // 1. Buscar APENAS pelo código (removemos o filtro de data do SQL)
+        String sql = "SELECT id, enunciado, data_inicio, data_fim FROM pergunta WHERE codigo_acesso = ?";
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, codigo);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                // Dados da Base de Dados
+                int perguntaId = rs.getInt("id");
+                String enunciado = rs.getString("enunciado");
+                String inicioStr = rs.getString("data_inicio"); // ex: "2025-11-23 00:30"
+                String fimStr = rs.getString("data_fim");       // ex: "2025-11-23 00:40"
+
+                // 2. DEBUG: Vamos ver o que o computador está a ler!
+                System.out.println("--- DEBUG HORA ---");
+                System.out.println("Pergunta encontrada: " + enunciado);
+                System.out.println("Início BD: " + inicioStr);
+                System.out.println("Fim BD:    " + fimStr);
+
+                // 3. Validação de Datas em JAVA (Mais seguro)
+                try {
+                    java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+                    java.time.LocalDateTime inicio = java.time.LocalDateTime.parse(inicioStr, formatter);
+                    java.time.LocalDateTime fim = java.time.LocalDateTime.parse(fimStr, formatter);
+                    java.time.LocalDateTime agora = java.time.LocalDateTime.now();
+
+                    System.out.println("Agora:     " + agora.format(formatter)); // Vê se esta hora bate certo!
+
+                    if (agora.isBefore(inicio)) {
+                        System.out.println("ERRO: Ainda não começou.");
+                        return null;
+                    }
+                    if (agora.isAfter(fim)) {
+                        System.out.println("ERRO: Já acabou.");
+                        return null;
+                    }
+
+                } catch (Exception e) {
+                    System.err.println("Erro ao processar datas (formato errado?): " + e.getMessage());
+                    // Se der erro nas datas, deixamos passar ou retornamos null?
+                    // Para teste, retornamos null para obrigar a corrigir o formato.
+                    return null;
+                }
+
+                // Se passou nas datas, vamos buscar as opções
+                List<Map<String, Object>> opcoes = new java.util.ArrayList<>();
+                try (PreparedStatement psOp = conn.prepareStatement(
+                        "SELECT letra, texto FROM opcao WHERE pergunta_id = ? ORDER BY letra")) {
+                    psOp.setInt(1, perguntaId);
+                    ResultSet rsOp = psOp.executeQuery();
+                    while (rsOp.next()) {
+                        opcoes.add(Map.of(
+                                "letra", rsOp.getString("letra"),
+                                "texto", rsOp.getString("texto")
+                        ));
+                    }
+                }
+
+                return Map.of(
+                        "id", perguntaId,
+                        "enunciado", enunciado,
+                        "opcoes", opcoes
+                );
+            } else {
+                System.out.println("DEBUG: Código " + codigo + " não existe na tabela pergunta.");
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null; // Não encontrada
+    }
+
+    //
+
+    public static boolean jaRespondeu(int alunoId, int perguntaId) {
+        String sql = "SELECT COUNT(*) FROM resposta WHERE estudante_numero = ? AND pergunta_id = ?";
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, alunoId);
+            ps.setInt(2, perguntaId);
+
+            try (ResultSet rs = ps.executeQuery()) {
+                // O COUNT(*) devolve sempre uma linha, mesmo que seja 0
+                if (rs.next()) {
+                    int count = rs.getInt(1);
+                    System.out.println("DEBUG: Aluno " + alunoId + " tem " + count + " respostas na pergunta " + perguntaId);
+                    return count > 0;
+                }
+            }
+
+        } catch (SQLException e) {
+            System.err.println("ERRO SQL em jaRespondeu: " + e.getMessage());
+            e.printStackTrace();
+        }
+
+        // Se der erro técnico, assumimos FALSE para conseguires testar (mas cuidado em produção!)
+        return false;
+    }
+
+    // 3. Registar a resposta
+    public static boolean registarResposta(int alunoId, int perguntaId, String opcao) {
+
+        // --- MUDANÇA AQUI ---
+        java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        String dataHora = java.time.LocalDateTime.now().format(formatter);
+        // --------------------
+
+        String sql = "INSERT INTO resposta (estudante_numero, pergunta_id, opcao_escolhida, data_resposta) " +
+                "VALUES (" + alunoId + ", " + perguntaId + ", '" + opcao + "', '" + dataHora + "')";
+
+        try {
+            executeLocalUpdate(sql);
+            return true;
+        } catch (java.sql.SQLException e) {
+            System.err.println("Erro SQL Resposta: " + e.getMessage());
+            return false;
+        }
+    }
+
 }
