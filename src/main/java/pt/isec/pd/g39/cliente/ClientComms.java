@@ -28,293 +28,14 @@ public class ClientComms {
     boolean isDocente = false;
     int idUser;
 
+    private String lastLoginEmail = null;
+    private String lastLoginPassword = null;
+    private long loginDeadlineMs = 0L;
+
     public ClientComms(String directoryIp, int directoryPort) {
         this.directoryIp = directoryIp;
         this.directoryPort = directoryPort;
     }
-
-    public void start() throws IOException {
-        getTCP();
-
-        boolean done = false;
-        Scanner scanner = new Scanner(System.in);
-
-        String choice;
-        while (true) {
-            System.out.println("Registo ou Login?");
-            choice = scanner.nextLine().trim().toLowerCase();
-            if (choice.equals("login") || choice.equals("registo")) {
-                break;
-            }
-            System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
-        }
-
-        if (choice.equals("login")) {
-            runLoginSession(scanner);
-        } else {
-            System.out.print("Email: ");
-            String email = scanner.nextLine().trim();
-
-            System.out.print("Password: ");
-            String password = scanner.nextLine().trim();
-
-            System.out.print("Nome: ");
-            String nome = scanner.nextLine().trim();
-
-            String role;
-            while (true) {
-                System.out.print("Estudante (S) ou Docente (D)? ");
-                role = scanner.nextLine().trim().toLowerCase();
-                if (role.equals("s") || role.equals("d")) break;
-                System.out.println("Opção inválida. Introduza 'S' para Estudante ou 'D' para Docente.");
-            }
-            String msg = "";
-            if (role.equals("s")) {
-                String n;
-                while (true) {
-                    System.out.print("Numero de estudante? ");
-                    n = scanner.nextLine().trim();
-                    if (!n.isBlank() && n.matches("\\d+")) break;
-                    System.out.println("Número inválido. Introduza apenas dígitos.");
-                }
-                msg = gson.toJson(Map.of(
-                        "type", "REGISTER_STUDENT",
-                        "nome", nome,
-                        "email", email,
-                        "password", password,
-                        "numero", n
-                ));
-            } else {
-                System.out.print("Secret Code: ");
-                String secretCode = scanner.nextLine().trim();
-                msg = gson.toJson(Map.of(
-                        "type", "REGISTER_TEACHER",
-                        "nome", nome,
-                        "email", email,
-                        "password", password,
-                        "secret_code", secretCode
-                ));
-                isDocente = true;
-            }
-            sendSingleMessage(msg);
-        }
-        while (!done) {
-            if (isDocente) {
-                System.out.println("O que fazer:");
-                System.out.println("1 -> Sair");
-                System.out.println("2 -> Criar uma pergunta");
-                System.out.println("3 -> Editar Pergunta");
-                System.out.println("4 -> Eliminar Perguntas");
-                System.out.println("5 -> Listar Perguntas c/Filtro (Ativas/Futuras/Expiradas)");
-                System.out.println("6 -> Ver respostas de perguntas expiradas");
-
-                String choice2 = scanner.nextLine().trim();
-                switch (choice2) {
-                    case "1":
-                        done = true;
-                        break;
-                    case "2":
-                        criarPergunta();
-                        break;
-                    case "3":
-                        editarPergunta();
-                        break;
-                    case "4":
-                        eliminarPergunta();
-                        break;
-                    case "5":
-                        consultarPerguntas();
-                        break;
-                    case "6":
-                        consultarRespostaPerguntaExpirada();
-                        break;
-                    default:
-                        System.out.println("Opção inválida. A voltar ao menu.");
-                }
-            } else {
-                System.out.println("O que fazer:");
-                System.out.println("1 -> Sair");
-                System.out.println("2 -> Responder a uma pergunta");
-                System.out.println("3 -> Consultar perguntas respondidas(expiradas)");
-
-                String choice2 = scanner.nextLine().trim();
-                switch (choice2) {
-                    case "1":
-                        done = true;
-                        break;
-                    case "2":
-                         responderPergunta();
-                         break;
-                         case "3":
-                             consultarPerguntasExpiradas();
-                             break;
-                    default:
-                        System.out.println("Opção inválida. A voltar ao menu.");
-                }
-            }
-        }
-        System.out.println("A terminar.");
-    }
-
-    private void consultarRespostaPerguntaExpirada() {
-        Scanner sc = new Scanner(System.in);
-
-        // Primeiro listar as perguntas do docente que já expiraram
-        System.out.println("A obter perguntas expiradas...");
-
-        String msg = gson.toJson(Map.of(
-                "type", "LIST_QUESTIONS_FILTER",
-                "filtro", "e" // usar filtro expiradas
-        ));
-
-        Map<String, Object> resposta = sendAndReceive(msg);
-
-        List<Map<String, Object>> perguntas =
-                (List<Map<String, Object>>) resposta.get("perguntas");
-
-        if (perguntas.isEmpty()) {
-            System.out.println("Não existem perguntas expiradas.");
-            return;
-        }
-
-        System.out.println("\nPerguntas expiradas:");
-        for (int i = 0; i < perguntas.size(); i++) {
-            System.out.println(i + " -> " + perguntas.get(i).get("enunciado"));
-        }
-
-        System.out.print("Escolha a pergunta: ");
-        int escolha = Integer.parseInt(sc.nextLine());
-
-        int perguntaId = ((Double) perguntas.get(escolha).get("id")).intValue();
-
-        // Agora pedir ao servidor todas as respostas
-        msg = gson.toJson(Map.of(
-                "type", "LIST_QUESTION_ANSWERS",
-                "pergunta_id", perguntaId
-        ));
-
-        resposta = sendAndReceive(msg);
-
-        if (!"LIST_QUESTION_ANSWERS_OK".equals(resposta.get("type"))) {
-            System.out.println("Erro: " + resposta.get("message"));
-            return;
-        }
-
-        Map<String, Object> pergunta = (Map<String, Object>) resposta.get("pergunta");
-        List<Map<String, Object>> opcoes = (List<Map<String, Object>>) resposta.get("opcoes");
-        List<Map<String, Object>> respostas = (List<Map<String, Object>>) resposta.get("respostas");
-        double percentagem = (Double) resposta.get("percentagem_certas");
-
-        System.out.println("\n============================");
-        System.out.println("Enunciado: " + pergunta.get("enunciado"));
-        System.out.println("Início: " + pergunta.get("data_inicio"));
-        System.out.println("Fim: " + pergunta.get("data_fim"));
-
-        System.out.println("\nOpções:");
-        for (Map<String, Object> op : opcoes) {
-            boolean correta = (Boolean) op.get("correta");
-
-            System.out.println(op.get("letra") + ") " + op.get("texto") +
-                    (correta ? " (correta)" : ""));
-        }
-
-        System.out.println("\nRespostas submetidas:");
-        for (Map<String, Object> r : respostas) {
-            System.out.println("---------------------");
-            System.out.println("Estudante: " + r.get("numero") + " | " + r.get("nome"));
-            System.out.println("Email: " + r.get("email"));
-            System.out.println("Resposta: " + r.get("opcao_escolhida"));
-            System.out.println("Correta?: " + (((Boolean) r.get("correta")) ? "SIM" : "NÃO"));
-            System.out.println("Data: " + r.get("data_resposta"));
-        }
-
-        System.out.println("\nPercentagem de corretas: " + percentagem + "%");
-
-        System.out.println("============================\n");
-        System.out.println("Deseja exportar a pergunta para um ficheiro CSV? (s/n):");
-        String exportChoice = sc.nextLine().trim().toLowerCase();
-        while(true){
-            if(exportChoice.equals("s") || exportChoice.equals("n")){
-                break;
-            }else{
-                System.out.println("Opção inválida. Introduza 's' para sim ou 'n' para não:");
-                exportChoice = sc.nextLine().trim().toLowerCase();
-            }
-        }
-
-        if(exportChoice.equals("s")){
-            try {
-                java.nio.file.Path resourcesDir = java.nio.file.Paths.get("src", "main", "resources");
-                java.util.function.Function<String, String> esc = s -> {
-                    if (s == null) return "";
-                    return s.replace("\"", "\"\"");
-                };
-
-                String dataInicioStr = (String) pergunta.get("data_inicio");
-                String dataFimStr = (String) pergunta.get("data_fim");
-                String dia = "";
-                String horaIni = "";
-                String horaFim = "";
-                if (dataFimStr != null) {
-                    String[] parts = dataFimStr.split(" ");
-                    if (parts.length >= 2) horaFim = parts[1];
-                }
-                String enunciadoPerg = (String) pergunta.get("enunciado");
-                if (dataInicioStr != null) {
-                    String[] parts = dataInicioStr.split(" ");
-                    if (parts.length >= 2) {
-                        dia = parts[0];
-                        horaIni = parts[1];
-                    }
-                }
-                String opcaoCerta = "";
-                for (Map<String, Object> op : opcoes) {
-                    Object corObj = op.get("correta");
-                    boolean correta = corObj instanceof Boolean ? (Boolean) corObj : Boolean.TRUE.equals(corObj);
-                    if (correta) {
-                        opcaoCerta = String.valueOf(op.get("letra"));
-                        break;
-                    }
-                }
-
-                String perguntaIdStr = String.valueOf(pergunta.get("id"));
-                java.nio.file.Path file = resourcesDir.resolve("pergunta_" + perguntaIdStr + ".csv");
-
-                try (java.io.BufferedWriter writer = java.nio.file.Files.newBufferedWriter(file, java.nio.charset.StandardCharsets.UTF_8)) {
-                    writer.write("\"dia\";\"hora inicial\";\"hora final\";\"enunciado da pergunta\";\"opção certa\"");
-                    writer.newLine();
-                    writer.write("\"" + esc.apply(dia) + "\";\"" + esc.apply(horaIni) + "\";\"" + esc.apply(horaFim) + "\";\"" + esc.apply(enunciadoPerg) + "\";\"" + esc.apply(opcaoCerta) + "\"");
-                    writer.newLine();
-                    writer.newLine();
-
-                    writer.write("\"opção\";\"texto da opção\"");
-                    writer.newLine();
-                    for (Map<String, Object> op : opcoes) {
-                        String letra = String.valueOf(op.get("letra"));
-                        String texto = String.valueOf(op.get("texto"));
-                        writer.write(letra + ";\"" + esc.apply(texto) + "\"");
-                        writer.newLine();
-                    }
-                    writer.newLine();
-
-                    writer.write("\"número de estudante\";\"nome\";\"e-mail\";\"resposta\"");
-                    writer.newLine();
-                    for (Map<String, Object> r : respostas) {
-                        String numero = String.valueOf(r.get("numero"));
-                        String nome = String.valueOf(r.get("nome"));
-                        String email = String.valueOf(r.get("email"));
-                        String respostaGiven = String.valueOf(r.get("opcao_escolhida"));
-                        writer.write("\"" + esc.apply(numero) + "\";\"" + esc.apply(nome) + "\";\"" + esc.apply(email) + "\";\"" + esc.apply(respostaGiven) + "\"");
-                        writer.newLine();
-                    }
-                }
-                System.out.println("Pergunta exportada para: " + file.toAbsolutePath());
-            } catch (Exception e) {
-                System.err.println("Erro ao exportar a pergunta: " + e.getMessage());
-            }
-        }
-    }
-
 
     private void getTCP() throws IOException {
         /*
@@ -360,104 +81,15 @@ public class ClientComms {
         return socket;
     }
 
-    private void runLoginSession(Scanner scanner) {
-        String lastEmail;
-        String lastPassword;
-
-        System.out.print("Email: ");
-        lastEmail = scanner.nextLine().trim();
-        System.out.print("Password: ");
-        lastPassword = scanner.nextLine().trim();
-
-        long deadlineMs = System.currentTimeMillis() + LOGIN_TIME;
-        boolean retriedAfterSame = false;
-
-        while (System.currentTimeMillis() <= deadlineMs) {
-            try (Socket socket = connectToCurrentServer();
-                 BufferedWriter out = new BufferedWriter(
-                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
-                 BufferedReader in = new BufferedReader(
-                         new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
-
-                String msg = gson.toJson(Map.of(
-                        "type", "LOGIN",
-                        "email", lastEmail,
-                        "password", lastPassword
-                ));
-                out.write(msg);
-                out.write("\n");
-                out.flush();
-
-                String reply = in.readLine();
-                if (reply == null || reply.isBlank()) {
-                    throw new IOException("Ligação encerrada pelo servidor.");
-                }
-
-                @SuppressWarnings("unchecked")
-                Map<String, Object> json = gson.fromJson(reply, Map.class);
-                String type = (String) json.get("type");
-                String message = (String) json.get("message");
-                String perfil = (String) json.get("perfil");
-                Object idObj = json.get("id");
-                if (idObj instanceof Double) {
-                    idUser = ((Double) idObj).intValue();
-                } else if (idObj instanceof Number) {
-                    idUser = ((Number) idObj).intValue();
-                }
-                if (perfil != null && perfil.equals("docente")) {
-                    isDocente = true;
-                }
-                if ("LOGIN_OK".equals(type)) {
-                    System.out.println("Login bem-sucedido!");
-                    return;
-                } else if ("LOGIN_FAIL".equals(type)) {
-                    long remainingSec = Math.max(0, (deadlineMs - System.currentTimeMillis()) / 1000);
-                    if (remainingSec <= 0) {
-                        System.out.println("Janela de 30s expirada.");
-                        break;
-                    }
-                    System.out.println("Falha no login: " + message + " | Tente novamente (" + remainingSec + "s restantes)");
-                    System.out.print("Email: ");
-                    lastEmail = scanner.nextLine().trim();
-                    System.out.print("Password: ");
-                    lastPassword = scanner.nextLine().trim();
-                } else {
-                    System.out.println("Resposta inesperada do servidor: " + type);
-                    return;
-                }
-
-            } catch (SocketTimeoutException e) {
-                System.err.println("Timeout à espera de resposta. Servidor pode ter encerrado.");
-                if (!attemptRecoveryLogin(deadlineMs, retriedAfterSame)) {
-                    System.exit(1);
-                } else {
-                    retriedAfterSame = true;
-                }
-            } catch (IOException e) {
-                System.err.println("Erro na comunicação TCP: " + e.getMessage());
-                if (!attemptRecoveryLogin(deadlineMs, retriedAfterSame)) {
-                    System.exit(1);
-                } else {
-                    retriedAfterSame = true;
-                }
-            }
-        }
-
-        System.out.println("Não foi possível completar o login. A terminar.");
-        System.exit(1);
-    }
-
-    private void sendSingleMessage(String msg) {
+    private Map<String, Object> sendSingleMessage(String msg) {
         String previousIp = ipServer;
         int previousPort = tcpPortServer;
         boolean waitedOnce = false;
 
         for (int attempt = 0; attempt < 2; attempt++) {
             try (Socket socket = connectToCurrentServer();
-                 BufferedWriter out = new BufferedWriter(
-                         new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
-                 BufferedReader in = new BufferedReader(
-                         new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
+                 BufferedWriter out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
+                 BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))) {
 
                 out.write(msg);
                 out.write("\n");
@@ -465,292 +97,41 @@ public class ClientComms {
 
                 String reply = in.readLine();
                 if (reply == null || reply.isBlank()) {
-                    System.out.println("Sem resposta do servidor.");
-                    return;
+                    return Map.of("type", "ERROR", "message", "Empty or closed reply from server");
                 }
 
+                @SuppressWarnings("unchecked")
                 Map<String, Object> json = gson.fromJson(reply, Map.class);
-                String type = (String) json.get("type");
-                String message = (String) json.getOrDefault("message", "");
-                Object idObj = json.get("id");
 
+                Object idObj = json.get("id");
                 if (idObj instanceof Double) {
                     idUser = ((Double) idObj).intValue();
                 } else if (idObj instanceof Number) {
                     idUser = ((Number) idObj).intValue();
                 }
-
-                switch (type) {
-                    case "REGISTER_OK":
-                        System.out.println("Registo bem-sucedido!");
-                        return;
-                    case "REGISTER_FAIL":
-                        System.out.println("Falha no registo: " + message);
-                        return;
-                    case "LOGIN_OK":
-                        System.out.println("Login bem-sucedido!");
-                        return;
-                    case "LOGIN_FAIL":
-                        System.out.println("Falha no login: " + message);
-                        return;
-                    default:
-                        System.out.println("Resposta inesperada do servidor: " + type);
-                        return;
-                }
-
+                return json;
             } catch (IOException e) {
                 System.err.println("Erro na comunicação TCP: " + e.getMessage());
-                RecoveryAction action = attemptRecovery(previousIp, previousPort, waitedOnce, -1);
-                switch (action) {
-                    case RETRY_IMMEDIATE:
-                        System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
-                        previousIp = ipServer;
-                        previousPort = tcpPortServer;
-                        break;
-                    case RETRY_AFTER_WAIT:
-                        System.out.println("Mesmo servidor principal; aguardar 20s e tentar novamente...");
+                boolean reauthed = attemptRecoveryLogin(loginDeadlineMs, waitedOnce);
+                if (reauthed) {
+                    System.out.println("Servidor e autenticação recuperados; a tentar reenviar automaticamente.");
+                    previousIp = ipServer;
+                    previousPort = tcpPortServer;
+                    continue;
+                } else {
+                    if (!waitedOnce) {
                         waitedOnce = true;
-                        break;
-                    case GIVE_UP:
-                    default:
-                        System.out.println("Operação de envio falhou após tentativas. A terminar.");
-                        System.exit(1);
+                        continue;
+                    }
+                    System.out.println("Operação de envio falhou após tentativas. A terminar.");
+                    System.exit(1);
                 }
             }
         }
 
         System.out.println("Operação de envio falhou após tentativas. A terminar.");
         System.exit(1);
-    }
-
-    //
-
-    private void responderPergunta() {
-        Scanner sc = new Scanner(System.in);
-
-        // 1. Pedir o código
-        System.out.print("\nIntroduza o código da pergunta (ex: 9H45G1): ");
-        String codigo = sc.nextLine().trim();
-
-        if (codigo.isEmpty()) return;
-
-        // 2. Enviar pedido ao servidor
-        String msg = gson.toJson(Map.of(
-                "type", "GET_QUESTION_BY_CODE",
-                "codigo", codigo,
-                "aluno_id", idUser // Enviamos o ID do aluno para verificar se já respondeu
-        ));
-
-        Map<String, Object> resposta = sendAndReceive(msg);
-
-        // 3. Verificar Erros
-        if (!"GET_QUESTION_OK".equals(resposta.get("type"))) {
-            String erro = (String) resposta.getOrDefault("message", "Erro desconhecido.");
-            System.out.println("Erro: " + erro);
-            return;
-        }
-
-        // 4. Mostrar a Pergunta
-        String enunciado = (String) resposta.get("enunciado");
-        int perguntaId = ((Double) resposta.get("id")).intValue();
-        List<Map<String, String>> opcoes = (List<Map<String, String>>) resposta.get("opcoes");
-
-        System.out.println("\n========================================");
-        System.out.println("PERGUNTA: " + enunciado);
-        System.out.println("========================================");
-
-        for (Map<String, String> op : opcoes) {
-            System.out.println("[" + op.get("letra") + "] " + op.get("texto"));
-        }
-
-        // 5. Escolher a resposta
-        String escolha;
-        while (true) {
-            System.out.print("\nA sua resposta (letra): ");
-            escolha = sc.nextLine().trim().toUpperCase();
-
-            // Validação simples para ver se a letra existe nas opções
-            boolean valida = false;
-            for (Map<String, String> op : opcoes) {
-                if (op.get("letra").equalsIgnoreCase(escolha)) {
-                    valida = true;
-                    break;
-                }
-            }
-
-            if (valida) break;
-            System.out.println("Opção inválida. Tente novamente.");
-        }
-
-        // 6. Submeter Resposta
-        String msgSubmit = gson.toJson(Map.of(
-                "type", "SUBMIT_ANSWER",
-                "aluno_id", idUser,
-                "pergunta_id", perguntaId,
-                "opcao", escolha
-        ));
-
-        Map<String, Object> respostaSubmit = sendAndReceive(msgSubmit);
-
-        if ("SUBMIT_ANSWER_OK".equals(respostaSubmit.get("type"))) {
-            System.out.println(" " + respostaSubmit.get("message"));
-        } else {
-            System.out.println("Erro " + respostaSubmit.get("message"));
-        }
-    }
-
-
-
-    private void criarPergunta() {
-        Scanner sc = new Scanner(System.in);
-
-        System.out.print("Enunciado: ");
-        String enunciado = sc.nextLine();
-
-        System.out.print("Data início (yyyy-MM-dd HH:mm): ");
-        String di = sc.nextLine();
-
-        System.out.print("Data fim (yyyy-MM-dd HH:mm): ");
-        String df = sc.nextLine();
-
-        System.out.print("Quantas opções? ");
-        int n = Integer.parseInt(sc.nextLine());
-
-        List<Map<String, Object>> opcoes = new ArrayList<>();
-
-        for (int i = 0; i < n; i++) {
-            System.out.println("Opção " + (char)('A' + i));
-            System.out.print("Texto: ");
-            String texto = sc.nextLine();
-
-            System.out.print("É a correta? (s/n): ");
-            boolean correta = sc.nextLine().trim().equalsIgnoreCase("s");
-
-            opcoes.add(Map.of(
-                    "letra", String.valueOf((char)('A' + i)),
-                    "texto", texto,
-                    "correta", correta
-            ));
-        }
-
-        String msg = gson.toJson(Map.of(
-                "type", "CREATE_QUESTION",
-                "docente_id", idUser,
-                "enunciado", enunciado,
-                "data_inicio", di,
-                "data_fim", df,
-                "opcoes", opcoes
-        ));
-
-        sendSingleMessage(msg);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void editarPergunta(){
-        Scanner sc = new Scanner(System.in);
-
-        String msg = gson.toJson(Map.of(
-                "type", "LIST_QUESTIONS",
-                "docente_id", idUser
-        ));
-
-        Map<String, Object> resposta = sendAndReceive(msg);
-        if(!"LIST_QUESTIONS_OK".equals(resposta.get("type"))){
-            System.out.println("Erro ao obter perguntas.");
-            return;
-        }
-
-        List<Map<String, Object>> perguntas =
-                (List<Map<String, Object>>) resposta.get("perguntas");
-
-        if (perguntas.isEmpty()) {
-            System.out.println("Não tem perguntas para editar.");
-            return;
-        }
-
-        // 2. Mostrar lista com índice
-        System.out.println("\n=== PERGUNTAS CRIADAS ===");
-        for (int i = 0; i < perguntas.size(); i++) {
-            System.out.println((i + 1) + " -> " +
-                    perguntas.get(i).get("enunciado") +
-                    " (Código: " + perguntas.get(i).get("codigo_acesso") + ")");
-        }
-
-        System.out.print("Escolha o número da pergunta: ");
-        int idx = Integer.parseInt(sc.nextLine()) - 1;
-
-        int perguntaId = ((Double) perguntas.get(idx).get("id")).intValue();
-
-        // 3. Pedir detalhes para edição
-        msg = gson.toJson(Map.of(
-                "type", "GET_QUESTION_FOR_EDIT",
-                "pergunta_id", perguntaId
-        ));
-
-        resposta = sendAndReceive(msg);
-
-        if ("QUESTION_HAS_ANSWERS".equals(resposta.get("type"))) {
-            System.out.println("Não é possível editar — já existem respostas.");
-            return;
-        }
-
-        if (!"GET_QUESTION_OK".equals(resposta.get("type"))) {
-            System.out.println("Erro ao obter detalhes da pergunta.");
-            return;
-        }
-
-        // Dados recebidos
-        String enunciado = (String) resposta.get("enunciado");
-        String dataInicio = (String) resposta.get("data_inicio");
-        String dataFim = (String) resposta.get("data_fim");
-        List<Map<String, Object>> opcoes =
-                (List<Map<String, Object>>) resposta.get("opcoes");
-
-        // 4. EDITAR (perguntas ao utilizador)
-        System.out.println("\nNovo enunciado (ENTER mantém): " + enunciado);
-        String novoEnunciado = sc.nextLine();
-        if (novoEnunciado.isBlank()) novoEnunciado = enunciado;
-
-        System.out.println("Nova data início (ENTER mantém): " + dataInicio);
-        String novaDI = sc.nextLine();
-        if (novaDI.isBlank()) novaDI = dataInicio;
-
-        System.out.println("Nova data fim (ENTER mantém): " + dataFim);
-        String novaDF = sc.nextLine();
-        if (novaDF.isBlank()) novaDF = dataFim;
-
-        // 5. Editar opções
-        for (int i = 0; i < opcoes.size(); i++) {
-            Map<String, Object> op = opcoes.get(i);
-            System.out.println("Opção " + op.get("letra") + ": " + op.get("texto"));
-
-            System.out.print("Novo texto (ENTER mantém): ");
-            String novoTexto = sc.nextLine();
-            if (!novoTexto.isBlank())
-                op.put("texto", novoTexto);
-
-            System.out.print("É a correta? (s/n, ENTER mantém): ");
-            String cor = sc.nextLine().trim();
-            if (cor.equalsIgnoreCase("s")) op.put("correta", true);
-            else if (cor.equalsIgnoreCase("n")) op.put("correta", false);
-        }
-
-        // 6. Enviar alterações
-        msg = gson.toJson(Map.of(
-                "type", "EDIT_QUESTION",
-                "pergunta_id", perguntaId,
-                "enunciado", novoEnunciado,
-                "data_inicio", novaDI,
-                "data_fim", novaDF,
-                "opcoes", opcoes
-        ));
-
-        Map<String, Object> respostaFinal = sendAndReceive(msg);
-
-        if ("EDIT_QUESTION_OK".equals(respostaFinal.get("type")))
-            System.out.println("Pergunta editada com sucesso!");
-        else
-            System.out.println("Erro ao editar pergunta.");
+        return Map.of("type", "ERROR", "message", "unreachable");
     }
 
     private Map<String, Object> sendAndReceive(String msg) {
@@ -779,19 +160,18 @@ public class ClientComms {
 
             } catch (IOException e) {
                 System.err.println("Erro na comunicação TCP: " + e.getMessage());
-                RecoveryAction action = attemptRecovery(previousIp, previousPort, waitedOnce, -1);
-                switch (action) {
-                    case RETRY_IMMEDIATE:
-                        System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reenviar automaticamente.");
-                        previousIp = ipServer;
-                        previousPort = tcpPortServer;
-                        continue;
-                    case RETRY_AFTER_WAIT:
+                boolean reauthed = attemptRecoveryLogin(loginDeadlineMs, waitedOnce);
+                if (reauthed) {
+                    System.out.println("Servidor e autenticação recuperados; a tentar reenviar automaticamente.");
+                    previousIp = ipServer;
+                    previousPort = tcpPortServer;
+                    continue;
+                } else {
+                    if (!waitedOnce) {
                         waitedOnce = true;
-                        break;
-                    case GIVE_UP:
-                    default:
-                        return Map.of("type", "ERROR", "message", e.getMessage());
+                        continue;
+                    }
+                    return Map.of("type", "ERROR", "message", e.getMessage());
                 }
             } catch (Exception e) {
                 System.err.println("Erro: " + e.getMessage());
@@ -800,97 +180,6 @@ public class ClientComms {
         }
 
         return Map.of("type", "ERROR", "message", "Operação de envio falhou após tentativas.");
-    }
-
-    private void eliminarPergunta() {
-        Scanner sc = new Scanner(System.in);
-
-        // 1. Pedir lista ao servidor
-        String msg = gson.toJson(Map.of(
-                "type", "LIST_QUESTIONS",
-                "docente_id", idUser
-        ));
-
-        Map<String, Object> resposta = sendAndReceive(msg);
-
-        if (!"LIST_QUESTIONS_OK".equals(resposta.get("type"))) {
-            System.out.println("Erro ao obter perguntas.");
-            return;
-        }
-
-        List<Map<String, Object>> perguntas = (List<Map<String, Object>>) resposta.get("perguntas");
-
-        if (perguntas.isEmpty()) {
-            System.out.println("Não tem perguntas criadas.");
-            return;
-        }
-
-        System.out.println("Perguntas disponíveis:");
-        for (int i = 0; i < perguntas.size(); i++) {
-            System.out.println(i + " -> " + perguntas.get(i).get("enunciado"));
-        }
-
-        System.out.print("Escolha o número da pergunta a eliminar: ");
-        int escolha = Integer.parseInt(sc.nextLine());
-
-        int perguntaId = ((Double) perguntas.get(escolha).get("id")).intValue();
-
-        // 3. Enviar pedido DELETE
-        msg = gson.toJson(Map.of(
-                "type", "DELETE_QUESTION",
-                "pergunta_id", perguntaId
-        ));
-
-        Map<String, Object> respostaDelete = sendAndReceive(msg);
-
-        System.out.println(respostaDelete.get("message"));
-    }
-
-    private void consultarPerguntas() {
-        Scanner scanner = new Scanner(System.in);
-        String choice = "";
-        while (true) {
-            System.out.print("Deseja consultar perguntas ativas, futuras ou expiradas? (A/F/E): ");
-            choice = scanner.nextLine().trim().toLowerCase();
-            if (choice.equals("a") || choice.equals("f") || choice.equals("e")) break;
-            System.out.println("Opção inválida. Introduza A para ativas, F para futuras ou E para expiradas.");
-        }
-
-        String msg = gson.toJson(Map.of(
-                "type", "LIST_QUESTIONS_FILTER",
-                "filtro", choice
-        ));
-
-        Map<String, Object> resposta = sendAndReceive(msg);
-
-        if (!"LIST_QUESTIONS_FILTER_OK".equals(resposta.get("type"))) {
-            System.out.println("Erro ao obter perguntas: " + resposta.getOrDefault("message", "unknown"));
-            return;
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> perguntas = (List<Map<String, Object>>) resposta.get("perguntas");
-
-        if (perguntas == null || perguntas.isEmpty()) {
-            System.out.println("Não existem perguntas para este filtro.");
-            return;
-        }
-
-        String lista;
-        switch (choice) {
-            case "a": lista = "ativas"; break;
-            case "f": lista = "futuras"; break;
-            default:  lista = "expiradas"; break;
-        }
-
-        System.out.println("Perguntas " + lista + ":");
-        for (int i = 0; i < perguntas.size(); i++) {
-            Map<String, Object> p = perguntas.get(i);
-            System.out.println(i + " -> " + p.get("enunciado")
-                    + " // " + p.get("data_inicio") + " até " + p.get("data_fim")
-                    + " // Codigo de acesso: " + p.get("codigo_acesso")
-                    + " // ID pergunta: " + p.get("id"));
-        }
     }
 
     private enum RecoveryAction {
@@ -947,53 +236,187 @@ public class ClientComms {
         RecoveryAction action = attemptRecovery(previousIp, previousPort, alreadyWaitedOnce, Math.max(0, deadlineMs - System.currentTimeMillis()));
         switch (action) {
             case RETRY_IMMEDIATE:
-                System.out.println("Servidor principal mudou para " + ipServer + ":" + tcpPortServer + " — a tentar reconectar automaticamente.");
-                return true;
             case RETRY_AFTER_WAIT:
-                return true;
+                long now = System.currentTimeMillis();
+                long effectiveDeadline = Math.min(loginDeadlineMs, deadlineMs);
+                if (lastLoginEmail == null || lastLoginPassword == null || now > effectiveDeadline) {
+                    System.out.println("No stored credentials or login window expired; cannot re-authenticate automatically.");
+                    return false;
+                }
+
+                System.out.println("Attempting automatic re-login to " + ipServer + ":" + tcpPortServer + " ...");
+                String loginMsg = gson.toJson(Map.of(
+                        "type", "LOGIN",
+                        "email", lastLoginEmail,
+                        "password", lastLoginPassword
+                ));
+                Map<String, Object> resp = sendAndReceive(loginMsg);
+                String type = (String) resp.get("type");
+                if ("LOGIN_OK".equals(type)) {
+                    Object idObj = resp.get("id");
+                    if (idObj instanceof Double) {
+                        idUser = ((Double) idObj).intValue();
+                    } else if (idObj instanceof Number) {
+                        idUser = ((Number) idObj).intValue();
+                    }
+                    String perfil = (String) resp.getOrDefault("perfil", "");
+                    isDocente = "docente".equalsIgnoreCase(perfil);
+
+                    System.out.println("Re-login successful.");
+                    return true;
+                } else {
+                    System.out.println("Automatic re-login failed: " + resp.getOrDefault("message", "no message"));
+                    return false;
+                }
+
             case GIVE_UP:
             default:
                 return false;
         }
     }
 
-
-    private void  consultarPerguntasExpiradas(){
-        Scanner sc = new Scanner(System.in);
-
-        System.out.print("Filtrar por data (ENTER para ignorar): ");
-        String filtro = sc.nextLine();
-
-        String msg = gson.toJson(Map.of(
-                "type", "LIST_ANSWERED_EXPIRED",
-                "aluno_id", idUser,
-                "filtro_data", filtro
-        ));
-
-        Map<String, Object> resposta = sendAndReceive(msg);
-
-        if(!"LIST_ANSWERED_EXPIRED_OK".equals(resposta.get("type"))){
-            System.out.println("Erro ao obter perguntas expiradas.");
-            return;
-        }
-
-        List<Map<String, Object>> perguntas =
-                (List<Map<String, Object>>) resposta.get("perguntas");
-
-        if(perguntas.isEmpty()){
-            System.out.println("Nenhuma pergunta expirou ou ainda não respondeu a nenhuma.");
-            return;
-        }
-
-        for(Map<String, Object> p : perguntas){
-            System.out.println("-----");
-            System.out.println("Pergunta: " + p.get("enunciado"));
-            System.out.println("Data fim: " + p.get("data_fim"));
-            System.out.println("Resposta dada: " + p.get("resposta_dada"));
-            System.out.println("Correta?: " + (((Boolean)p.get("correta")) ? "SIM" : "Não"));
-            System.out.println("Data resposta: " + p.get("data_resposta"));
-        }
+    public void initDirectory() throws IOException {
+        getTCP();
     }
 
+    public Map<String, Object> registerStudent(String nome, String email, String password, String numero) {
+        String msg = gson.toJson(Map.of(
+                "type", "REGISTER_STUDENT",
+                "nome", nome,
+                "email", email,
+                "password", password,
+                "numero", numero
+        ));
+        return sendSingleMessage(msg);
+    }
+
+    public Map<String, Object> registerTeacher(String nome, String email, String password, String secretCode) {
+        String msg = gson.toJson(Map.of(
+                "type", "REGISTER_TEACHER",
+                "nome", nome,
+                "email", email,
+                "password", password,
+                "secret_code", secretCode
+        ));
+        return sendSingleMessage(msg);
+    }
+
+    public Map<String, Object> login(String email, String password) {
+        this.lastLoginEmail = email;
+        this.lastLoginPassword = password;
+        this.loginDeadlineMs = System.currentTimeMillis() + LOGIN_TIME;
+
+        String msg = gson.toJson(Map.of(
+                "type", "LOGIN",
+                "email", email,
+                "password", password
+        ));
+        Map<String, Object> resp = sendAndReceive(msg);
+
+        String type = (String) resp.get("type");
+        if ("LOGIN_OK".equals(type)) {
+            Object idObj = resp.get("id");
+            if (idObj instanceof Double) {
+                idUser = ((Double) idObj).intValue();
+            } else if (idObj instanceof Number) {
+                idUser = ((Number) idObj).intValue();
+            }
+            String perfil = (String) resp.getOrDefault("perfil", "");
+            isDocente = "docente".equalsIgnoreCase(perfil);
+        }
+        return resp;
+    }
+
+    public Map<String, Object> listQuestionsFilter(String filtro) {
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTIONS_FILTER",
+                "filtro", filtro
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> listQuestionAnswers(int perguntaId) {
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTION_ANSWERS",
+                "pergunta_id", perguntaId
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> createQuestion(int docenteId, String enunciado, String dataInicio, String dataFim, List<Map<String, Object>> opcoes) {
+        String msg = gson.toJson(Map.of(
+                "type", "CREATE_QUESTION",
+                "docente_id", docenteId,
+                "enunciado", enunciado,
+                "data_inicio", dataInicio,
+                "data_fim", dataFim,
+                "opcoes", opcoes
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> editQuestion(int perguntaId, String enunciado, String dataInicio, String dataFim, List<Map<String, Object>> opcoes) {
+        String msg = gson.toJson(Map.of(
+                "type", "EDIT_QUESTION",
+                "pergunta_id", perguntaId,
+                "enunciado", enunciado,
+                "data_inicio", dataInicio,
+                "data_fim", dataFim,
+                "opcoes", opcoes
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> deleteQuestion(int perguntaId) {
+        String msg = gson.toJson(Map.of(
+                "type", "DELETE_QUESTION",
+                "pergunta_id", perguntaId
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> getQuestionByCode(String codigo, int alunoId) {
+        String msg = gson.toJson(Map.of(
+                "type", "GET_QUESTION_BY_CODE",
+                "codigo", codigo,
+                "aluno_id", alunoId
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> submitAnswer(int alunoId, int perguntaId, String opcao) {
+        String msg = gson.toJson(Map.of(
+                "type", "SUBMIT_ANSWER",
+                "aluno_id", alunoId,
+                "pergunta_id", perguntaId,
+                "opcao", opcao
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> listAnsweredExpired(int alunoId, String filtroData) {
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_ANSWERED_EXPIRED",
+                "aluno_id", alunoId,
+                "filtro_data", filtroData
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> listQuestions(int docenteId) {
+        String msg = gson.toJson(Map.of(
+                "type", "LIST_QUESTIONS",
+                "docente_id", docenteId
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> getQuestionForEdit(int perguntaId) {
+        String msg = gson.toJson(Map.of(
+                "type", "GET_QUESTION_FOR_EDIT",
+                "pergunta_id", perguntaId
+        ));
+        return sendAndReceive(msg);
+    }
 
 }

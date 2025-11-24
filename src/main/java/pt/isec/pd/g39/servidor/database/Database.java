@@ -121,9 +121,35 @@ public class Database {
     }
 
     //
-// Registar estudante ou professor
+    // Registar estudante ou professor
+
+    private static boolean emailExistsInAnyTable(String email) {
+        if (email == null || email.isBlank()) return false;
+        try (Connection conn = DriverManager.getConnection(url())) {
+            try (PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM estudante WHERE email = ? LIMIT 1")) {
+                ps.setString(1, email);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) return true;
+                }
+            }
+            try (PreparedStatement ps = conn.prepareStatement("SELECT 1 FROM docente WHERE email = ? LIMIT 1")) {
+                ps.setString(1, email);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next()) return true;
+                }
+            }
+            return false;
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return true;
+        }
+    }
 
     public static boolean registerEstudante(int numero, String nome, String email, String password) {
+        if (emailExistsInAnyTable(email)) {
+            System.err.println("Erro ao registar estudante: email já existe (estudante/docente).");
+            return false;
+        }
         String sql = "INSERT INTO estudante (numero, nome, email, password) VALUES (" +
                 numero + ", '" + nome + "', '" + email + "', '" + password + "')";
 
@@ -138,6 +164,10 @@ public class Database {
     }
 
     public static boolean registerDocente(String nome, String email, String password) {
+        if (emailExistsInAnyTable(email)) {
+            System.err.println("Erro ao registar docente: email já existe (estudante/docente).");
+            return false;
+        }
         // Nota: O enunciado diz que o registo de docente precisa de um código secreto,
         // mas isso valida-se ANTES de chamar esta função. Aqui só guardamos.
         String sql = "INSERT INTO docente (nome, email, password) VALUES ('" +
