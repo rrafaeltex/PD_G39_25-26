@@ -5,7 +5,6 @@ import com.google.gson.Gson;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class DirecaoServerList {
@@ -32,13 +31,13 @@ public class DirecaoServerList {
 
     public synchronized void unregister(InetAddress ip, int tcpClients) {
         servidores.removeIf(s -> s.ip.equals(ip) && s.tcpPortClients == tcpClients);
-        if(servidores.get(0).isPrimary == false){servidores.get(0).isPrimary = true;}
+        if(!servidores.getFirst().isPrimary){servidores.getFirst().isPrimary = true;}
         System.out.println(" Servidor removido: " + ip.getHostAddress() + ":" + tcpClients);
     }
 
     public synchronized ServidorInfo getPrincipal() {
         if (servidores.isEmpty()) return null;
-        return servidores.get(0);
+        return servidores.getFirst();
     }
 
     public synchronized boolean updateHeartbeat(InetAddress ip, int tcpClients) {
@@ -56,7 +55,7 @@ public class DirecaoServerList {
         long now = System.currentTimeMillis();
         servidores.removeIf(s -> now - s.lastHeartbeat > 17000);
         if(!servidores.isEmpty()){
-            servidores.get(0).isPrimary = true;
+            servidores.getFirst().isPrimary = true;
         }
 
     }

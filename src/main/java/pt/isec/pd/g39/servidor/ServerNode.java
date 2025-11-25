@@ -16,7 +16,6 @@ public class ServerNode {
     private final String directoryIp;
     private final int directoryPort;
     private final String dbFolder;
-    private final String multicastLocalIp;
 
     private final Gson gson = new Gson();
 
@@ -24,9 +23,9 @@ public class ServerNode {
 
     private int clientPort;
     private int peerPort;
+    private final String multicastLocalIp;
 
     private String primaryIp;
-    private int primaryTcpClients;
     private int primaryTcpPeers;
 
     private ServerSocket clientServerSocket;
@@ -104,7 +103,7 @@ public class ServerNode {
 
         try {
             String myIp = "127.0.0.1";
-            HeartbeatManager.init(directoryIp, directoryPort, myIp, clientPort, peerPort);
+            HeartbeatManager.init(directoryIp, directoryPort, myIp, clientPort, peerPort, multicastLocalIp);
             HeartbeatManager.start();
         } catch (Exception e) {
             System.err.println("[HB] Erro ao iniciar HeartbeatManager: " + e.getMessage());
@@ -157,7 +156,7 @@ public class ServerNode {
             if ("REGISTERED".equals(json.get("type"))) {
 
                 primaryIp = (String) json.get("primary_ip");
-                primaryTcpClients = ((Double) json.get("primary_tcp_clients")).intValue();
+                int primaryTcpClients = ((Double) json.get("primary_tcp_clients")).intValue();
                 primaryTcpPeers = ((Double) json.get("primary_tcp_peers")).intValue();
 
                 if (primaryIp.equals(directoryIp) && primaryTcpClients == clientPort) {

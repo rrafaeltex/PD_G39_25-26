@@ -4,7 +4,7 @@ package pt.isec.pd.g39.servidor;
 import java.net.InetAddress;
 
 public class MainServer {
-    public static void main(String[] args) throws Exception {
+    static void main(String[] args) throws Exception {
 
         if (args.length != 4) {
             System.out.println("Uso: java pt.isec.pd.g39.servidor.MainServer <dirIp> <dirPort> <dbFolder> <multicastLocalIp>");
@@ -19,7 +19,7 @@ public class MainServer {
 
 
         ServerNode node = new ServerNode(dirIp, port, dbPath, multicastLocalIp);
-        ShutDownHandle shutdownHandler = new ShutDownHandle();
+        ShutDownHandle shutdownHandler = new ShutDownHandle(multicastLocalIp);
         System.out.println("Servidor ativo no porto " + port);
         node.start();
         shutdownHandler.start();

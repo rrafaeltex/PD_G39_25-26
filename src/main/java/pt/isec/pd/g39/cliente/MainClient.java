@@ -3,7 +3,7 @@ package pt.isec.pd.g39.cliente;
 import java.net.InetAddress;
 
 public class MainClient {
-    public static void main(String[] args) throws Exception {
+    static void main(String[] args) throws Exception {
         if (args.length != 2) {
             System.out.println("Uso: java MainClient <dirIp> <dirPort>");
             System.exit(1);

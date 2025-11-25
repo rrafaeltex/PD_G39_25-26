@@ -1,12 +1,10 @@
 package pt.isec.pd.g39.diretoria;
 
-import java.net.InetAddress;
-
 import static java.lang.Thread.sleep;
 
 
 public class MainDiretoria {
-    public static void main(String[] args) throws InterruptedException {
+     static void main() throws InterruptedException {
         int portoUDP = 4000;
         DirecaoServerList direcao = new DirecaoServerList();
         UDPReceiver receiver = new UDPReceiver(portoUDP, direcao);

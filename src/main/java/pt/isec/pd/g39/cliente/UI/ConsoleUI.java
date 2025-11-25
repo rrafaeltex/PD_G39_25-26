@@ -3,11 +3,12 @@ package pt.isec.pd.g39.cliente.UI;
 import pt.isec.pd.g39.cliente.ClientViewManager;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class ConsoleUI {
     private final ClientViewManager manager;
     private final Scanner scanner = new Scanner(System.in);
+
+    private int userId;
 
     public ConsoleUI(ClientViewManager manager) {
         this.manager = manager;
@@ -21,9 +22,8 @@ public class ConsoleUI {
             if (choice.equals("login") || choice.equals("registo")) break;
             System.out.println("Opção inválida. Por favor, escolha 'Registo' ou 'Login'.");
         }
-
-        int userId = -1;
-        boolean isDocente = false;
+        userId = -1;
+        boolean isDocente;
 
         if (choice.equals("registo")) {
             while (true) {
@@ -98,34 +98,38 @@ public class ConsoleUI {
         while (!done) {
             if (isDocente) {
                 System.out.println("O que fazer:");
-                System.out.println("1 -> Sair");
+                System.out.println("1 -> Editar dados do docente");
                 System.out.println("2 -> Criar uma pergunta");
                 System.out.println("3 -> Editar Pergunta");
                 System.out.println("4 -> Eliminar Perguntas");
                 System.out.println("5 -> Listar Perguntas c/Filtro (Ativas/Futuras/Expiradas)");
                 System.out.println("6 -> Ver respostas de perguntas expiradas");
+                System.out.println("7 -> Log Out");
 
                 String ch = scanner.nextLine().trim();
                 switch (ch) {
-                    case "1": done = true; break;
-                    case "2": handleCreateQuestion(userId); break;
-                    case "3": handleEditQuestion(userId); break;
-                    case "4": handleDeleteQuestion(userId); break;
+                    case "1": handleEditDataUser(isDocente); break;
+                    case "2": handleCreateQuestion(); break;
+                    case "3": handleEditQuestion(); break;
+                    case "4": handleDeleteQuestion(); break;
                     case "5": handleListQuestionsFilter(); break;
                     case "6": handleViewExpiredAnswers(); break;
+                    case "7": done = true; break;
                     default: System.out.println("Opção inválida."); break;
                 }
             } else {
                 System.out.println("O que fazer:");
-                System.out.println("1 -> Sair");
+                System.out.println("1 -> Editar dados do estudante");
                 System.out.println("2 -> Responder a uma pergunta");
                 System.out.println("3 -> Consultar perguntas respondidas(expiradas)");
+                System.out.println("4 -> LogOut");
 
                 String ch = scanner.nextLine().trim();
                 switch (ch) {
-                    case "1": done = true; break;
-                    case "2": handleAnswerQuestion(userId); break;
-                    case "3": handleListAnsweredExpired(userId); break;
+                    case "1": handleEditDataUser( isDocente); break;
+                    case "2": handleAnswerQuestion(); break;
+                    case "3": handleListAnsweredExpired(); break;
+                    case "4": done = true; break;
                     default: System.out.println("Opção inválida."); break;
                 }
             }
@@ -133,7 +137,7 @@ public class ConsoleUI {
         System.out.println("A terminar.");
     }
 
-    private void handleCreateQuestion(int docenteId) {
+    private void handleCreateQuestion() {
         System.out.print("Enunciado: ");
         String enunciado = scanner.nextLine();
         System.out.print("Data início (yyyy-MM-dd HH:mm): ");
@@ -152,12 +156,12 @@ public class ConsoleUI {
             boolean correta = scanner.nextLine().trim().equalsIgnoreCase("s");
             opcoes.add(Map.of("letra", letra, "texto", texto, "correta", correta));
         }
-        var resp = manager.createQuestion(docenteId, enunciado, di, df, opcoes);
+        var resp = manager.createQuestion(userId, enunciado, di, df, opcoes);
         System.out.println(resp.getOrDefault("message", resp.get("type")));
     }
 
-    private void handleEditQuestion(int docenteId) {
-        var resp = manager.listQuestions(docenteId);
+    private void handleEditQuestion() {
+        var resp = manager.listQuestions(userId);
         if (!"LIST_QUESTIONS_OK".equals(resp.get("type"))) {
             System.out.println("Erro: " + resp.getOrDefault("message", ""));
             return;
@@ -191,8 +195,7 @@ public class ConsoleUI {
         System.out.println("Nova data fim (ENTER mantém): " + dataFim);
         String novaDf = scanner.nextLine(); if (novaDf.isBlank()) novaDf = dataFim;
 
-        for (int i = 0; i < opcoes.size(); i++) {
-            Map<String, Object> op = opcoes.get(i);
+        for (Map<String, Object> op : opcoes) {
             System.out.println("Opção " + op.get("letra") + ": " + op.get("texto"));
             System.out.print("Novo texto (ENTER mantém): ");
             String nt = scanner.nextLine();
@@ -207,8 +210,8 @@ public class ConsoleUI {
         System.out.println(editResp.getOrDefault("message", editResp.get("type")));
     }
 
-    private void handleDeleteQuestion(int docenteId) {
-        var resp = manager.listQuestions(docenteId);
+    private void handleDeleteQuestion() {
+        var resp = manager.listQuestions(userId);
         if (!"LIST_QUESTIONS_OK".equals(resp.get("type"))) {
             System.out.println("Erro: " + resp.getOrDefault("message", ""));
             return;
@@ -381,12 +384,12 @@ public class ConsoleUI {
     }
 
 
-    private void handleAnswerQuestion(int alunoId) {
+    private void handleAnswerQuestion() {
         System.out.print("\nIntroduza o código da pergunta (ex: 9H45G1): ");
         String codigo = scanner.nextLine().trim();
         if (codigo.isEmpty()) return;
 
-        var resp = manager.getQuestionByCode(codigo, alunoId);
+        var resp = manager.getQuestionByCode(codigo, userId);
         if (!"GET_QUESTION_OK".equals(resp.get("type"))) {
             System.out.println("Erro: " + resp.getOrDefault("message", ""));
             return;
@@ -413,14 +416,14 @@ public class ConsoleUI {
             System.out.println("Opção inválida. Tente novamente.");
         }
 
-        var submit = manager.submitAnswer(alunoId, perguntaId, escolha);
+        var submit = manager.submitAnswer(userId, perguntaId, escolha);
         System.out.println(submit.getOrDefault("message", submit.get("type")));
     }
 
-    private void handleListAnsweredExpired(int alunoId) {
+    private void handleListAnsweredExpired() {
         System.out.print("Filtrar por data (ENTER para ignorar): ");
         String filtro = scanner.nextLine();
-        var resp = manager.listAnsweredExpired(alunoId, filtro);
+        var resp = manager.listAnsweredExpired(userId, filtro);
         if (!"LIST_ANSWERED_EXPIRED_OK".equals(resp.get("type"))) {
             System.out.println("Erro: " + resp.getOrDefault("message", ""));
             return;
@@ -435,4 +438,94 @@ public class ConsoleUI {
             System.out.println("Data resposta: " + p.get("data_resposta"));
         }
     }
+
+    private void handleEditDataUser(boolean isDocente) {
+        System.out.println("\n=== Editar dados de utilizador ===");
+
+        if (isDocente) {
+            System.out.println("Editar dados de DOCENTE.");
+
+            // 1) Ir buscar dados atuais
+            var dadosResp = manager.getUserData("docente", userId);
+            if (!"GET_USER_DATA_OK".equals(dadosResp.get("type"))) {
+                System.out.println("Erro ao obter dados do docente.");
+                return;
+            }
+
+            String oldNome = (String) dadosResp.get("nome");
+            String oldEmail = (String) dadosResp.get("email");
+            String oldPassword = (String) dadosResp.get("password");
+
+            System.out.println("Nome atual: " + oldNome);
+            System.out.print("Novo nome (ENTER mantém): ");
+            String nome = scanner.nextLine().trim();
+            if (nome.isBlank()) nome = oldNome;
+
+            System.out.println("E-mail atual: " + oldEmail);
+            System.out.print("Novo e-mail (ENTER mantém): ");
+            String email = scanner.nextLine().trim();
+            if (email.isBlank()) email = oldEmail;
+
+            System.out.println("Password atual: (oculta)");
+            System.out.print("Nova password (ENTER mantém): ");
+            String password = scanner.nextLine().trim();
+            if (password.isBlank()) password = oldPassword;
+
+            var resp = manager.editTeacher(userId, nome, email, password);
+            System.out.println(resp.getOrDefault("message", resp.get("type")));
+        }
+        else {
+            System.out.println("Editar dados de ESTUDANTE.");
+
+            // 1) Ir buscar dados atuais
+            var dadosResp = manager.getUserData("estudante", userId);
+            if (!"GET_USER_DATA_OK".equals(dadosResp.get("type"))) {
+                System.out.println("Erro ao obter dados do estudante.");
+                return;
+            }
+
+            String oldNome = (String) dadosResp.get("nome");
+            String oldEmail = (String) dadosResp.get("email");
+            String oldPassword = (String) dadosResp.get("password");
+            Object numObj = dadosResp.get("id");
+            int oldNumero;
+            if (numObj instanceof Double d) {
+                oldNumero = d.intValue();
+            } else if (numObj instanceof Number n) {
+                oldNumero = n.intValue();
+            } else {
+                throw new IllegalStateException("Valor 'numero' inválido no JSON: " + numObj);
+            }
+//            int oldNumero = ((Double) dadosResp.get("numero")).intValue();
+
+            System.out.println("Número atual: " + oldNumero);
+            System.out.print("Novo número (ENTER mantém): ");
+            String numStr = scanner.nextLine().trim();
+            int novoNumero = numStr.isBlank() ? oldNumero : Integer.parseInt(numStr);
+
+            System.out.println("Nome atual: " + oldNome);
+            System.out.print("Novo nome (ENTER mantém): ");
+            String nome = scanner.nextLine().trim();
+            if (nome.isBlank()) nome = oldNome;
+
+            System.out.println("E-mail atual: " + oldEmail);
+            System.out.print("Novo e-mail (ENTER mantém): ");
+            String email = scanner.nextLine().trim();
+            if (email.isBlank()) email = oldEmail;
+
+            System.out.println("Password atual: (oculta)");
+            System.out.print("Nova password (ENTER mantém): ");
+            String password = scanner.nextLine().trim();
+            if (password.isBlank()) password = oldPassword;
+
+            var resp = manager.editStudent(userId, novoNumero, nome, email, password);
+            System.out.println(resp.getOrDefault("message", resp.get("type")));
+            if(resp.getOrDefault("type", "").equals("EDIT_USER_OK")){
+                userId = novoNumero;
+            }
+        }
+
+        System.out.println("=================================\n");
+    }
+
 }

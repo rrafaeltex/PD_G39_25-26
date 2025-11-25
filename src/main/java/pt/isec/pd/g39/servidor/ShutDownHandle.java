@@ -2,7 +2,7 @@
 package pt.isec.pd.g39.servidor;
 
 import com.google.gson.Gson;
-import pt.isec.pd.g39.servidor.database.Database;
+
 
 import java.net.*;
 import java.nio.charset.StandardCharsets;
@@ -10,12 +10,13 @@ import java.util.Map;
 
 public class ShutDownHandle extends Thread {
 
-    private static final String MULTICAST_IP = "230.30.30.30";  // ✅ MESMO DO HEARTBEAT
+    private final String MULTICAST_IP ;
     private static final int SHUTDOWN_PORT = 5000;
     private final Gson gson = new Gson();
     private volatile boolean running = true;
 
-    public ShutDownHandle() {
+    public ShutDownHandle(String multicastLocalIp) {
+        this.MULTICAST_IP = multicastLocalIp;
         super("ShutdownHandler");
         setDaemon(false);
     }
@@ -25,7 +26,7 @@ public class ShutDownHandle extends Thread {
         try {
 
             MulticastSocket socket = new MulticastSocket(SHUTDOWN_PORT);
-            socket.joinGroup(InetAddress.getByName(MULTICAST_IP));  // ✅ JUNTAR AO GRUPO
+            socket.joinGroup(InetAddress.getByName(MULTICAST_IP));
             socket.setSoTimeout(2000);
 
             System.out.println("[SHUTDOWN-HANDLE] A escutar comandos SHUTDOWN via multicast "
@@ -83,11 +84,11 @@ public class ShutDownHandle extends Thread {
                 // Pequeno delay para garantir que a mensagem foi impressa
                 Thread.sleep(100);
 
-                System.out.println("[SHUTDOWN] ✅ Servidor encerrado com sucesso.");
+                System.out.println("[SHUTDOWN] Servidor encerrado com sucesso.");
                 System.exit(0);
 
             } catch (Exception e) {
-                System.err.println("[SHUTDOWN] ⚠️ Erro durante shutdown: " + e.getMessage());
+                System.err.println("[SHUTDOWN] Erro durante shutdown: " + e.getMessage());
                 System.exit(1);
             }
         }, "ShutdownExecutor").start();

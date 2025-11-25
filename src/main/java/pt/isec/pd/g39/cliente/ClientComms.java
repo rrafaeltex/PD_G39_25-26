@@ -10,10 +10,9 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Scanner;
+
 
 public class ClientComms {
     private final String directoryIp;
@@ -117,7 +116,6 @@ public class ClientComms {
                     System.out.println("Servidor e autenticação recuperados; a tentar reenviar automaticamente.");
                     previousIp = ipServer;
                     previousPort = tcpPortServer;
-                    continue;
                 } else {
                     if (!waitedOnce) {
                         waitedOnce = true;
@@ -165,7 +163,6 @@ public class ClientComms {
                     System.out.println("Servidor e autenticação recuperados; a tentar reenviar automaticamente.");
                     previousIp = ipServer;
                     previousPort = tcpPortServer;
-                    continue;
                 } else {
                     if (!waitedOnce) {
                         waitedOnce = true;
@@ -181,6 +178,8 @@ public class ClientComms {
 
         return Map.of("type", "ERROR", "message", "Operação de envio falhou após tentativas.");
     }
+
+
 
     private enum RecoveryAction {
         RETRY_IMMEDIATE,
@@ -418,5 +417,44 @@ public class ClientComms {
         ));
         return sendAndReceive(msg);
     }
+
+
+    // NEW – editar dados de DOCENTE
+    public Map<String, Object> editTeacher(int docenteId, String nome, String email, String password) {
+        String msg = gson.toJson(Map.of(
+                "type", "EDIT_USER_DATA",
+                "perfil", "docente",
+                "id", docenteId,
+                "nome", nome,
+                "email", email,
+                "password", password
+        ));
+        return sendAndReceive(msg);
+    }
+
+    // NEW – editar dados de ESTUDANTE (inclui novo número)
+    public Map<String, Object> editStudent(int numeroAtual, int novoNumero,
+                                           String nome, String email, String password) {
+        String msg = gson.toJson(Map.of(
+                "type", "EDIT_USER_DATA",
+                "perfil", "estudante",
+                "id", numeroAtual,
+                "novo_numero", novoNumero,
+                "nome", nome,
+                "email", email,
+                "password", password
+        ));
+        return sendAndReceive(msg);
+    }
+
+    public Map<String, Object> getUserData(String tipo, int id) {
+        String msg = gson.toJson(Map.of(
+                "type", "GET_USER_DATA",
+                "perfil", tipo,
+                "id", id
+        ));
+        return sendAndReceive(msg);
+    }
+
 
 }

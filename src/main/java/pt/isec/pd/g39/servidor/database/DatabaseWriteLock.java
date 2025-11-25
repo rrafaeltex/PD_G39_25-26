@@ -15,7 +15,7 @@ public class DatabaseWriteLock {
     public static void waitIfLocked() {
         while (locked) {
             try {
-                Thread.sleep(50);
+                Thread.sleep(500);
             } catch (InterruptedException ignored) {}
         }
     }

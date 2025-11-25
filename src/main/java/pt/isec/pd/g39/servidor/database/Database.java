@@ -145,11 +145,95 @@ public class Database {
         }
     }
 
+    // NEW – verifica se já existe algum estudante com este número
+    private static boolean studentNumberExists(int numero) {
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM estudante WHERE numero = ? LIMIT 1")) {
+
+            ps.setInt(1, numero);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            // Em caso de erro técnico, jogamos pelo seguro e dizemos que "existe"
+            return true;
+        }
+    }
+
+    // NEW – verifica se o email já existe noutro utilizador (estudante ou docente)
+// perfil: "s" para estudante, "d" para docente
+    private static boolean emailExistsInAnyTableExcept(String email, String perfil, int selfIdOrNumero) {
+        if (email == null || email.isBlank())
+            return false;
+
+        try (Connection conn = DriverManager.getConnection(url())) {
+
+            // Verificar na tabela estudante
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT 1 FROM estudante WHERE email = ? AND numero <> ? LIMIT 1")) {
+                ps.setString(1, email);
+                ps.setInt(2, perfil.equalsIgnoreCase("s") ? selfIdOrNumero : -1);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next())
+                        return true;
+                }
+            }
+
+            // Verificar na tabela docente
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT 1 FROM docente WHERE email = ? AND id <> ? LIMIT 1")) {
+                ps.setString(1, email);
+                ps.setInt(2, perfil.equalsIgnoreCase("d") ? selfIdOrNumero : -1);
+                try (ResultSet rs = ps.executeQuery()) {
+                    if (rs.next())
+                        return true;
+                }
+            }
+
+            return false;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            // Em caso de erro técnico, jogamos pelo seguro
+            return true;
+        }
+    }
+
+    // NEW – verifica se o novo número já está em uso por OUTRO estudante
+    private static boolean studentNumberTakenByOther(int novoNumero, int numeroAtual) {
+        if (novoNumero == numeroAtual)
+            return false;
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT 1 FROM estudante WHERE numero = ? AND numero <> ? LIMIT 1")) {
+
+            ps.setInt(1, novoNumero);
+            ps.setInt(2, numeroAtual);
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next();
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return true;
+        }
+    }
+
+
+
     public static boolean registerEstudante(int numero, String nome, String email, String password) {
         if (emailExistsInAnyTable(email)) {
             System.err.println("Erro ao registar estudante: email já existe (estudante/docente).");
             return false;
         }
+
+        if (studentNumberExists(numero)) {
+            System.err.println("Erro ao registar estudante: número de estudante já existe.");
+            return false;
+        }
+
         String sql = "INSERT INTO estudante (numero, nome, email, password) VALUES (" +
                 numero + ", '" + nome + "', '" + email + "', '" + password + "')";
 
@@ -182,81 +266,81 @@ public class Database {
         }
     }
 
-    public static String criarPergunta(int docenteId, String enunciado,
-                                       String dataInicio, String dataFim,
-                                       List<Map<String, Object>> opcoes) {
+    public static String criarPergunta(
+            int docenteId, String enunciado,
+            String dataInicio, String dataFim,
+            List<Map<String, Object>> opcoes) {
 
         DatabaseWriteLock.waitIfLocked();
 
-        Connection conn = null;
         try {
-            conn = DriverManager.getConnection(url());
-            conn.setAutoCommit(false);
-
-            // 1) Gerar código
-            String codigoAcesso;
+            // 1) Gerar código único (usando leitura simples)
+            String codigo;
             while (true) {
-                codigoAcesso = CodeGenerator.generateCode(6);
-                try (PreparedStatement ps = conn.prepareStatement(
-                        "SELECT COUNT(*) FROM pergunta WHERE codigo_acesso=?")) {
-                    ps.setString(1, codigoAcesso);
-                    ResultSet rs = ps.executeQuery();
-                    if (rs.next() && rs.getInt(1) == 0)
+                codigo = CodeGenerator.generateCode(6);
+
+                try (Connection c = DriverManager.getConnection(url());
+                     Statement s = c.createStatement()) {
+
+                    ResultSet rs = s.executeQuery(
+                            "SELECT COUNT(*) FROM pergunta WHERE codigo_acesso='" + codigo + "'"
+                    );
+                    rs.next();
+                    if (rs.getInt(1) == 0)
                         break;
                 }
             }
 
             // 2) Inserir pergunta
-            int perguntaId;
-            try (PreparedStatement ps = conn.prepareStatement("""
-                INSERT INTO pergunta (docente_id, enunciado, data_inicio, data_fim, codigo_acesso)
-                VALUES (?, ?, ?, ?, ?)
-                """, Statement.RETURN_GENERATED_KEYS)) {
-
-                ps.setInt(1, docenteId);
-                ps.setString(2, enunciado);
-                ps.setString(3, dataInicio);
-                ps.setString(4, dataFim);
-                ps.setString(5, codigoAcesso);
-                ps.executeUpdate();
-
-                ResultSet keys = ps.getGeneratedKeys();
-                keys.next();
-                perguntaId = keys.getInt(1);
-            }
-
-            // 3) Inserir opções
-            for (Map<String, Object> op : opcoes) {
-                try (PreparedStatement ps = conn.prepareStatement("""
-                    INSERT INTO opcao (pergunta_id, letra, texto, correta)
-                    VALUES (?, ?, ?, ?)
-                    """)) {
-                    ps.setInt(1, perguntaId);
-                    ps.setString(2, (String) op.get("letra"));
-                    ps.setString(3, (String) op.get("texto"));
-                    ps.setBoolean(4, (Boolean) op.get("correta"));
-                    ps.executeUpdate();
-                }
-            }
-
-            conn.commit();
-
-            // Agora sim, incrementa versão e envia heartbeat
-            int newVersion = getVersion() + 1;
-            setVersion(newVersion);
-
-            HeartbeatManager.sendHeartbeatWithSql(
-                    "INSERT/UPDATE PERGUNTA", newVersion
+            String sqlPergunta = String.format(
+                    "INSERT INTO pergunta (docente_id, enunciado, data_inicio, data_fim, codigo_acesso) " +
+                            "VALUES (%d, '%s', '%s', '%s', '%s')",
+                    docenteId,
+                    enunciado.replace("'", "''"),
+                    dataInicio,
+                    dataFim,
+                    codigo
             );
 
-            return codigoAcesso;
+            executeLocalUpdate(sqlPergunta);
+
+            // 3) Obter ID gerado
+            int perguntaId;
+            try (Connection c = DriverManager.getConnection(url());
+                 Statement s = c.createStatement()) {
+
+                ResultSet rs = s.executeQuery(
+                        "SELECT seq FROM sqlite_sequence WHERE name='pergunta'"
+                );
+                rs.next();
+                perguntaId = rs.getInt(1);
+            }
+
+            // 4) Inserir opções
+            for (Map<String, Object> op : opcoes) {
+
+                String letra = ((String) op.get("letra")).replace("'", "''");
+                String texto = ((String) op.get("texto")).replace("'", "''");
+                int corretaInt = ((Boolean) op.get("correta")) ? 1 : 0;
+
+                String sqlOpcao = String.format(
+                        "INSERT INTO opcao (pergunta_id, letra, texto, correta) " +
+                                "VALUES (%d, '%s', '%s', %d)",
+                        perguntaId, letra, texto, corretaInt
+                );
+
+                executeLocalUpdate(sqlOpcao);
+            }
+
+            return codigo;
 
         } catch (Exception e) {
             e.printStackTrace();
-            try { if (conn != null) conn.rollback(); } catch (Exception ignored) {}
             return null;
         }
     }
+
+
 
 
 
@@ -359,6 +443,7 @@ public class Database {
         return false;
     }
 
+
     public static Map<String, Object> getPerguntaCompleta(int perguntaId) {
         Map<String, Object> pergunta = new java.util.HashMap<>();
 
@@ -445,6 +530,73 @@ public class Database {
         }
     }
 
+    // NEW – atualizar dados do DOCENTE (nome, email, password)
+    public static boolean updateDocente(int docenteId, String nome, String email, String password) {
+
+        if (emailExistsInAnyTableExcept(email, "d", docenteId)) {
+            System.err.println("Erro ao atualizar docente: email já existe (estudante/docente).");
+            return false;
+        }
+
+        String sql = String.format(
+                "UPDATE docente SET nome='%s', email='%s', password='%s' WHERE id=%d",
+                (nome),
+                (email),
+                (password),
+                docenteId
+        );
+
+        try {
+            executeLocalUpdate(sql);
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Erro ao atualizar docente: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // NEW – atualizar dados do ESTUDANTE (nº, nome, email, password)
+    public static boolean updateEstudante(int numeroAtual, int novoNumero, String nome, String email, String password) {
+
+        if (emailExistsInAnyTableExcept(email, "s", numeroAtual)) {
+            System.err.println("Erro ao atualizar estudante: email já existe (estudante/docente).");
+            return false;
+        }
+
+        if (studentNumberTakenByOther(novoNumero, numeroAtual)) {
+            System.err.println("Erro ao atualizar estudante: número de estudante já em uso por outro aluno.");
+            return false;
+        }
+
+        String sql = String.format(
+                "UPDATE estudante SET numero=%d, nome='%s', email='%s', password='%s' WHERE numero=%d",
+                novoNumero,
+                (nome),
+                (email),
+                (password),
+                numeroAtual
+        );
+
+        String sql1 = String.format(
+                "UPDATE resposta SET estudante_numero=%d WHERE estudante_numero=%d",
+                novoNumero,
+                numeroAtual
+        );
+
+
+        try {
+            executeLocalUpdate(sql);
+            executeLocalUpdate(sql1);
+            return true;
+        } catch (SQLException e) {
+            System.err.println("Erro ao atualizar estudante: " + e.getMessage());
+            return false;
+        }
+
+
+    }
+
+
 
     public static boolean eliminarPergunta(int perguntaId) {
         if (perguntaTemRespostas(perguntaId))
@@ -516,7 +668,7 @@ public class Database {
         List<Map<String, Object>> lista = new ArrayList<>();
 
         StringBuilder sql = new StringBuilder("""
-        SELECT 
+        SELECT
             p.id AS pergunta_id,
             p.enunciado,
             p.data_inicio,
@@ -526,7 +678,7 @@ public class Database {
             o.correta AS resposta_certa
         FROM pergunta p
         JOIN resposta r ON p.id = r.pergunta_id
-        JOIN opcao o 
+        JOIN opcao o
             ON o.pergunta_id = p.id
            AND o.letra = r.opcao_escolhida
         WHERE r.estudante_numero = ?
@@ -930,6 +1082,43 @@ public class Database {
         } catch (java.sql.SQLException e) {
             System.err.println("Erro SQL Resposta: " + e.getMessage());
             return false;
+        }
+    }
+
+
+    public static Map<String, Object> getUserData(String perfil, int id) {
+        String sql;
+        boolean isDocente = "docente".equalsIgnoreCase(perfil);
+
+        if (isDocente) {
+            sql = "SELECT id, nome, email, password FROM docente WHERE id = ?";
+        } else {
+            sql = "SELECT numero, nome, email, password FROM estudante WHERE numero = ?";
+        }
+
+        try (Connection conn = DriverManager.getConnection(url());
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, id);
+            ResultSet rs = ps.executeQuery();
+
+            if (!rs.next())
+                return null;
+
+            Map<String, Object> map = new HashMap<>();
+            if (isDocente) {
+                map.put("id", rs.getInt("id"));
+            } else {
+                map.put("id", rs.getInt("numero")); // para manter compatível com o resto
+            }
+            map.put("nome", rs.getString("nome"));
+            map.put("email", rs.getString("email"));
+            map.put("password", rs.getString("password"));
+            return map;
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+            return null;
         }
     }
 

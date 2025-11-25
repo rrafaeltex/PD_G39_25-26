@@ -10,7 +10,7 @@ import java.util.Map;
 
 public class HeartbeatManager {
 
-    private static final String MULTICAST_IP = "230.30.30.30";
+    private static String MULTICAST_IP;
     private static final int MULTICAST_PORT = 3030;
 
     private static final Gson gson = new Gson();
@@ -26,12 +26,13 @@ public class HeartbeatManager {
 
     private static volatile boolean started = false;
 
-    public static void init(String dirIp, int dirPort, String localIpAddr, int clientP, int peerP) {
+    public static void init(String dirIp, int dirPort, String localIpAddr, int clientP, int peerP, String multicastLocalIp) {
         directoryIp = dirIp;
         directoryPort = dirPort;
         localIp = localIpAddr;
         clientPort = clientP;
         peerPort = peerP;
+        MULTICAST_IP = multicastLocalIp;
     }
 
     public static void start() {

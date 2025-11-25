@@ -8,7 +8,6 @@ import java.util.Map;
 
 public class ClientViewManager {
     private final ClientComms comms;
-    private ConsoleUI consoleUI;
 
     public ClientViewManager(ClientComms comms) {
         this.comms = comms;
@@ -18,7 +17,7 @@ public class ClientViewManager {
     public void startConsole() throws IOException {
         // ensure directory/server info is obtained before starting UI
         comms.initDirectory();
-        consoleUI = new ConsoleUI(this);
+        ConsoleUI consoleUI = new ConsoleUI(this);
         consoleUI.start();
     }
 
@@ -74,7 +73,22 @@ public class ClientViewManager {
         return comms.listQuestions(docenteId);
     }
 
+
     public Map<String, Object> getQuestionForEdit(int perguntaId) {
         return comms.getQuestionForEdit(perguntaId);
+    }
+
+
+    public Map<String, Object> editTeacher(int docenteId, String nome, String email, String password) {
+        return comms.editTeacher(docenteId, nome, email, password);
+    }
+
+    public Map<String, Object> editStudent(int numeroAtual, int novoNumero,
+                                           String nome, String email, String password) {
+        return comms.editStudent(numeroAtual, novoNumero, nome, email, password);
+    }
+
+    public Map<String, Object> getUserData(String tipo, int id){
+        return comms.getUserData(tipo, id);
     }
 }

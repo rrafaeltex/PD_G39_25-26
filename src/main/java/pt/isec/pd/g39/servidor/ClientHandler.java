@@ -6,7 +6,6 @@ import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 import java.sql.SQLException;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.net.*;
@@ -20,7 +19,6 @@ public class ClientHandler extends Thread {
 
     private final Socket socket;
     private PrintWriter out;
-    private BufferedReader in;
     private final Gson gson = new Gson();
 
     public ClientHandler(Socket socket) {
@@ -35,7 +33,7 @@ public class ClientHandler extends Thread {
             socket.setSoTimeout(30_000);
             // 1. Preparar os canais de comunicação (Texto)
             this.out = new PrintWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8), true);
-            this.in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
 
             // 2. Ciclo principal: Ficar à escuta de mensagens do cliente
             String clientMessage;
@@ -59,6 +57,15 @@ public class ClientHandler extends Thread {
                     case "REGISTER_TEACHER":
                         handleRegisterTeacher(request);
                         break;
+
+                    case "GET_USER_DATA":
+                        handleGetUserData(request);
+                        break;
+
+                    case "EDIT_USER_DATA":
+                        handleEditUserData(request);
+                        break;
+
                     case "CREATE_QUESTION":
                         handleCreateQuestion(request);
                         break;
@@ -114,6 +121,8 @@ public class ClientHandler extends Thread {
         }
     }
 
+
+
     private void handleListQuestionAnswers(Map<String, Object> request) {
         int perguntaId = ((Double) request.get("pergunta_id")).intValue();
 
@@ -130,7 +139,7 @@ public class ClientHandler extends Thread {
     }
 
     /**
-     * Trata de um pedido de Login.
+     * Trata de um pedido de ‘Login’.
      */
 //
     private void handleLogin(Map<String, Object> request) {
@@ -143,7 +152,7 @@ public class ClientHandler extends Thread {
         Map<String, Object> user = Database.checkLogin(email, password);
 
         if (user != null) {
-            // Login OK! Devolvemos os dados do utilizador ao cliente
+            // ‘Login’ OK! Devolvemos os dados do utilizador ao cliente
             Map<String, Object> responseData = new HashMap<>(user);
             responseData.remove("sucesso"); // Não precisamos enviar este flag
             sendResponse("LOGIN_OK", responseData);
@@ -382,5 +391,68 @@ public class ClientHandler extends Thread {
 
         System.out.println("RESPONDI EXPIRADAS -> " + gson.toJson(lista));
     }
+
+
+    private void handleGetUserData(Map<String, Object> request) {
+        String perfil = (String) request.get("perfil");
+        int id = ((Double) request.get("id")).intValue();
+
+        Map<String, Object> dados = Database.getUserData(perfil, id);
+        if (dados == null) {
+            sendResponse("GET_USER_DATA_FAIL",
+                    Map.of("message", "Utilizador não encontrado."));
+        } else {
+            // devolve: type + perfil + id + nome + email + password
+            Map<String, Object> resp = new HashMap<>(dados);
+            resp.put("perfil", perfil.toLowerCase());
+            sendResponse("GET_USER_DATA_OK", resp);
+        }
+    }
+
+    // NEW – editar dados de utilizador (docente ou estudante)
+    private void handleEditUserData(Map<String, Object> request) {
+        String perfil = (String) request.get("perfil");
+
+        if ("docente".equalsIgnoreCase(perfil)) {
+            Object numObj = request.get("id");
+            int docenteId;
+            if (numObj instanceof Double d) {
+                docenteId = d.intValue();
+            } else if (numObj instanceof Number n) {
+                docenteId = n.intValue();
+            } else {
+                throw new IllegalStateException("Valor 'numero' inválido no JSON: " + numObj);
+            }
+            //int docenteId = ((Double) request.get("id")).intValue();
+            String nome = (String) request.get("nome");
+            String email = (String) request.get("email");
+            String password = (String) request.get("password");
+
+            boolean ok = Database.updateDocente(docenteId, nome, email, password);
+            if (ok) {
+                sendResponse("EDIT_USER_OK", Map.of("message", "Dados do docente atualizados com sucesso."));
+            } else {
+                sendResponse("EDIT_USER_FAIL", Map.of("message", "Erro ao atualizar dados do docente (email ou outro conflito)."));
+            }
+
+        } else if ("estudante".equalsIgnoreCase(perfil)) {
+            int numeroAtual = ((Double) request.get("id")).intValue();
+            int novoNumero = ((Double) request.get("novo_numero")).intValue();
+            String nome = (String) request.get("nome");
+            String email = (String) request.get("email");
+            String password = (String) request.get("password");
+
+            boolean ok = Database.updateEstudante(numeroAtual, novoNumero, nome, email, password);
+            if (ok) {
+                sendResponse("EDIT_USER_OK", Map.of("message", "Dados do estudante atualizados com sucesso."));
+            } else {
+                sendResponse("EDIT_USER_FAIL", Map.of("message", "Erro ao atualizar dados do estudante (email ou número já em uso)."));
+            }
+
+        } else {
+            sendResponse("EDIT_USER_FAIL", Map.of("message", "Perfil desconhecido para edição de utilizador."));
+        }
+    }
+
 
 }
