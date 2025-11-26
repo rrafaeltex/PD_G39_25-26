@@ -68,7 +68,7 @@ public class ClientComms {
             System.out.println("Resposta inesperada do servico de diretoria.");
             System.exit(1);
         } catch (Exception e) {
-            System.err.println(e);
+            System.err.println("[ERRO] " + e.getMessage());
             System.exit(1);
         }
     }
@@ -81,8 +81,6 @@ public class ClientComms {
     }
 
     private Map<String, Object> sendSingleMessage(String msg) {
-        String previousIp = ipServer;
-        int previousPort = tcpPortServer;
         boolean waitedOnce = false;
 
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -114,8 +112,6 @@ public class ClientComms {
                 boolean reauthed = attemptRecoveryLogin(loginDeadlineMs, waitedOnce);
                 if (reauthed) {
                     System.out.println("Servidor e autenticação recuperados; a tentar reenviar automaticamente.");
-                    previousIp = ipServer;
-                    previousPort = tcpPortServer;
                 } else {
                     if (!waitedOnce) {
                         waitedOnce = true;
@@ -133,8 +129,6 @@ public class ClientComms {
     }
 
     private Map<String, Object> sendAndReceive(String msg) {
-        String previousIp = ipServer;
-        int previousPort = tcpPortServer;
         boolean waitedOnce = false;
 
         for (int attempt = 0; attempt < 2; attempt++) {
@@ -161,8 +155,6 @@ public class ClientComms {
                 boolean reauthed = attemptRecoveryLogin(loginDeadlineMs, waitedOnce);
                 if (reauthed) {
                     System.out.println("Servidor e autenticação recuperados; a tentar reenviar automaticamente.");
-                    previousIp = ipServer;
-                    previousPort = tcpPortServer;
                 } else {
                     if (!waitedOnce) {
                         waitedOnce = true;
@@ -187,7 +179,8 @@ public class ClientComms {
         GIVE_UP
     }
 
-    private RecoveryAction attemptRecovery(String previousIp, int previousPort, boolean alreadyWaitedOnce, long maxWaitMs) {
+    private RecoveryAction attemptRecovery(String previousIp, int previousPort,
+                                           boolean alreadyWaitedOnce, long maxWaitMs) {
         try {
             getTCP();
         } catch (IOException e) {
@@ -196,29 +189,34 @@ public class ClientComms {
         }
 
         boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
+
         if (changed) {
+            // Servidor principal mudou → tentar imediatamente
             return RecoveryAction.RETRY_IMMEDIATE;
-        } else {
-            if (alreadyWaitedOnce) {
-                System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
-                return RecoveryAction.GIVE_UP;
-            }
-            long wait;
-            if (maxWaitMs > 0) {
-                wait = Math.min(20_000L, maxWaitMs);
-            } else {
-                wait = 20_000L;
-            }
-            if (wait <= 0) {
-                System.out.println("Janela de login expirada durante espera.");
-                return RecoveryAction.GIVE_UP;
-            }
-            try {
-                Thread.sleep(wait);
-            } catch (InterruptedException ignored) {}
-            return RecoveryAction.RETRY_AFTER_WAIT;
         }
+
+        // Servidor ainda é o mesmo
+        if (alreadyWaitedOnce) {
+            System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
+            return RecoveryAction.GIVE_UP;
+        }
+
+        // Se a janela de login já expirou → abortar
+        if (maxWaitMs <= 0) {
+            System.out.println("Janela de login expirada durante espera.");
+            return RecoveryAction.GIVE_UP;
+        }
+
+        // Espera no máximo 20 segundos, mas nunca excede a janela restante
+        long wait = Math.min(20_000L, maxWaitMs);
+
+        try {
+            Thread.sleep(wait);
+        } catch (InterruptedException ignored) {}
+
+        return RecoveryAction.RETRY_AFTER_WAIT;
     }
+
 
     private boolean attemptRecoveryLogin(long deadlineMs, boolean alreadyWaitedOnce) {
         /*

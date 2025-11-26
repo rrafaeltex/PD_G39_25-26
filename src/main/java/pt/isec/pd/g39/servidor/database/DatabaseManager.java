@@ -9,10 +9,13 @@ public class DatabaseManager {
         File folder = new File(dbFolder);
 
         if (!folder.exists()) {
-            folder.mkdirs();
+            if (!folder.mkdirs()) {
+                System.err.println("[BD] Erro: não foi possível criar a pasta da BD: " + dbFolder);
+            }
         }
 
-        File[] dbFiles = folder.listFiles((dir, name) -> name.endsWith(".db"));
+
+        File[] dbFiles = folder.listFiles((_, name) -> name.endsWith(".db"));
 
         if (dbFiles == null || dbFiles.length == 0) {
             return gerarNomeBD(dbFolder, "server_v0.db");

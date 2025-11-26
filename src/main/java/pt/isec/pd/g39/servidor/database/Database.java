@@ -140,7 +140,7 @@ public class Database {
             }
             return false;
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return true;
         }
     }
@@ -156,7 +156,7 @@ public class Database {
                 return rs.next();
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             // Em caso de erro técnico, jogamos pelo seguro e dizemos que "existe"
             return true;
         }
@@ -195,7 +195,7 @@ public class Database {
             return false;
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             // Em caso de erro técnico, jogamos pelo seguro
             return true;
         }
@@ -216,7 +216,7 @@ public class Database {
                 return rs.next();
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return true;
         }
     }
@@ -335,7 +335,7 @@ public class Database {
             return codigo;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return null;
         }
     }
@@ -367,7 +367,7 @@ public class Database {
                 );
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         // Se não for estudante, tenta ver se é Docente
@@ -389,7 +389,7 @@ public class Database {
                 );
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         return null;
@@ -417,7 +417,7 @@ public class Database {
                 ));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         return lista;
@@ -437,7 +437,7 @@ public class Database {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         return false;
@@ -489,7 +489,7 @@ public class Database {
             pergunta.put("opcoes", opcoes);
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return null;
         }
 
@@ -525,7 +525,7 @@ public class Database {
             return true;
 
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return false;
         }
     }
@@ -609,7 +609,7 @@ public class Database {
             executeLocalUpdate("DELETE FROM pergunta WHERE id=" + perguntaId);
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return false;
         }
     }
@@ -657,7 +657,7 @@ public class Database {
                 ));
             }
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
         return lista;
     }
@@ -716,7 +716,7 @@ public class Database {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         return lista;
@@ -827,7 +827,7 @@ public class Database {
             );
 
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return null;
         }
     }
@@ -846,7 +846,7 @@ public class Database {
                 return Integer.parseInt(rs.getString("value"));
 
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
         return 0;
     }
@@ -861,7 +861,7 @@ public class Database {
             ps.executeUpdate();
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
     }
 
@@ -914,7 +914,7 @@ public class Database {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         return false;
@@ -1031,7 +1031,7 @@ public class Database {
             }
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
         return null; // Não encontrada
     }
@@ -1058,7 +1058,7 @@ public class Database {
 
         } catch (SQLException e) {
             System.err.println("ERRO SQL em jaRespondeu: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
         }
 
         // Se der erro técnico, assumimos FALSE para conseguires testar (mas cuidado em produção!)
@@ -1117,7 +1117,7 @@ public class Database {
             return map;
 
         } catch (SQLException e) {
-            e.printStackTrace();
+            System.err.println("[Database] Erro: " + e.getMessage());
             return null;
         }
     }

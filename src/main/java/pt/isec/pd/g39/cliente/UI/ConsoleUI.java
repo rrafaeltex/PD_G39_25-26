@@ -96,8 +96,8 @@ public class ConsoleUI {
 
         boolean done = false;
         while (!done) {
+            System.out.println("O que fazer:");
             if (isDocente) {
-                System.out.println("O que fazer:");
                 System.out.println("1 -> Editar dados do docente");
                 System.out.println("2 -> Criar uma pergunta");
                 System.out.println("3 -> Editar Pergunta");
@@ -118,7 +118,6 @@ public class ConsoleUI {
                     default: System.out.println("Opção inválida."); break;
                 }
             } else {
-                System.out.println("O que fazer:");
                 System.out.println("1 -> Editar dados do estudante");
                 System.out.println("2 -> Responder a uma pergunta");
                 System.out.println("3 -> Consultar perguntas respondidas(expiradas)");
@@ -158,6 +157,7 @@ public class ConsoleUI {
         }
         var resp = manager.createQuestion(userId, enunciado, di, df, opcoes);
         System.out.println(resp.getOrDefault("message", resp.get("type")));
+        System.out.println("Código de acesso da pergunta: " + resp.get("codigo_acesso"));
     }
 
     private void handleEditQuestion() {

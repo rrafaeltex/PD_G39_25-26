@@ -45,7 +45,7 @@ public class UDPReceiver extends Thread {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.err.println("[UDPReceiver] Erro: " + e.getMessage());
         }
         }
 

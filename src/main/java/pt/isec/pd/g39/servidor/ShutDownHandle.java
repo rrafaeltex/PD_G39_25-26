@@ -1,9 +1,6 @@
-
 package pt.isec.pd.g39.servidor;
 
 import com.google.gson.Gson;
-
-
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -23,38 +20,41 @@ public class ShutDownHandle extends Thread {
 
     @Override
     public void run() {
-        try {
+            try {
 
-            MulticastSocket socket = new MulticastSocket(SHUTDOWN_PORT);
-            socket.joinGroup(InetAddress.getByName(MULTICAST_IP));
-            socket.setSoTimeout(2000);
+                MulticastSocket socket = new MulticastSocket(SHUTDOWN_PORT);
 
-            System.out.println("[SHUTDOWN-HANDLE] A escutar comandos SHUTDOWN via multicast "
-                    + MULTICAST_IP + ":" + SHUTDOWN_PORT);
+                InetAddress group = InetAddress.getByName(MULTICAST_IP);
+                NetworkInterface nif = NetworkInterface.getByInetAddress(InetAddress.getLocalHost());
 
-            byte[] buffer = new byte[1024];
+                socket.joinGroup(new InetSocketAddress(group, SHUTDOWN_PORT), nif);
+                socket.setSoTimeout(2000);
 
-            while (running) {
-                try {
-                    DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                    socket.receive(packet);
+                System.out.println("[SHUTDOWN-HANDLE] A escutar comandos SHUTDOWN via multicast "
+                        + MULTICAST_IP + ":" + SHUTDOWN_PORT);
 
-                    String msg = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
-                    processMessage(msg, packet.getAddress().getHostAddress());
+                byte[] buffer = new byte[1024];
 
-                } catch (SocketTimeoutException e) {
-                    // Timeout normal - continua a esperar
+                while (running) {
+                    try {
+                        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                        socket.receive(packet);
+
+                        String msg = new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8);
+                        processMessage(msg, packet.getAddress().getHostAddress());
+
+                    } catch (SocketTimeoutException e) {
+                        // timeout normal — continuar o ciclo
+                    }
                 }
+
+                socket.leaveGroup(new InetSocketAddress(group, SHUTDOWN_PORT), nif);
+                socket.close();
+
+            } catch (Exception e) {
+                System.err.println("[SHUTDOWN-HANDLE] Erro: " + e.getMessage());
             }
-
-            socket.leaveGroup(InetAddress.getByName(MULTICAST_IP));
-            socket.close();
-
-        } catch (Exception e) {
-            System.err.println("[SHUTDOWN-HANDLE] Erro: " + e.getMessage());
-            e.printStackTrace();
         }
-    }
 
     private void processMessage(String msg, String senderIp) {
         try {
@@ -65,7 +65,6 @@ public class ShutDownHandle extends Thread {
                 System.out.println("[SHUTDOWN-HANDLE] ⚠️ Comando SHUTDOWN recebido de " + senderIp);
                 handleShutdown();
             }
-            // Ignorar outros tipos (como HEARTBEAT do HeartbeatManager)
 
         } catch (Exception e) {
             // Ignorar mensagens mal formatadas
@@ -73,15 +72,12 @@ public class ShutDownHandle extends Thread {
     }
 
     private void handleShutdown() {
-        // Parar de receber mensagens
         running = false;
 
-        // Executar shutdown em thread separada
         new Thread(() -> {
             try {
                 System.out.println("[SHUTDOWN] A fechar recursos do servidor...");
 
-                // Pequeno delay para garantir que a mensagem foi impressa
                 Thread.sleep(100);
 
                 System.out.println("[SHUTDOWN] Servidor encerrado com sucesso.");
@@ -92,9 +88,5 @@ public class ShutDownHandle extends Thread {
                 System.exit(1);
             }
         }, "ShutdownExecutor").start();
-    }
-
-    public void stopHandler() {
-        running = false;
     }
 }

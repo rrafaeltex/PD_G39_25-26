@@ -41,7 +41,10 @@ public class ClientHandler extends Thread {
 
                 System.out.println("[CLIENT " + socket.getPort() + " ➡] " + clientMessage);
 
-                Map<String, Object> request = gson.fromJson(clientMessage, Map.class);
+                //Map<String, Object> request = gson.fromJson(clientMessage, Map.class);
+                Map<String, Object> request = gson.fromJson(
+                        clientMessage,
+                        new com.google.gson.reflect.TypeToken<Map<String, Object>>(){}.getType());
                 String type = (String) request.get("type");
 
 

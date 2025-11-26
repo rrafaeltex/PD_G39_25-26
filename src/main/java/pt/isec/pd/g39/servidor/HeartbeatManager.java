@@ -72,7 +72,8 @@ public class HeartbeatManager {
 
                 Thread.sleep(5000);     // 5 segundos
             } catch (Exception e) {
-                e.printStackTrace();
+                System.err.println("[ERRO] " + e.getMessage());
+
                 try {
                     Thread.sleep(5000);
                 } catch (InterruptedException ignored) {}

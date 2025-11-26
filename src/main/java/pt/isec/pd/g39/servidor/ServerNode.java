@@ -45,7 +45,7 @@ public class ServerNode {
     public static synchronized void becomePrimary() {
         if (!isPrimary) {
             isPrimary = true;
-            System.out.println("🌟 Agora sou o servidor PRINCIPAL!");
+            System.out.println("Agora sou o servidor PRINCIPAL!");
 
 
             DatabaseSync.startPeerServer(peerServerSocket);
@@ -93,7 +93,7 @@ public class ServerNode {
                 return;
             }
 
-            ClientServer.start(clientServerSocket);
+            //ClientServer.start(clientServerSocket);
 
             System.out.println("BD sincronizada com sucesso.");
         }
