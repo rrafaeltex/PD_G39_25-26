@@ -92,7 +92,6 @@ public class DirecaoServerList {
         try (DatagramSocket socket = new DatagramSocket()) {
             Gson gson = new Gson();
 
-            // ✅ ENVIAR VIA MULTICAST PARA TODOS OS SERVIDORES
             String multicastIp = "230.30.30.30";
             int multicastPort = 5000;
 

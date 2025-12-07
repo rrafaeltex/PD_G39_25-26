@@ -13,17 +13,12 @@ public class ClientViewManager {
         this.comms = comms;
     }
 
-    // choose and start console UI
     public void startConsole() throws IOException {
-        // ensure directory/server info is obtained before starting UI
         comms.initDirectory();
         ConsoleUI consoleUI = new ConsoleUI(this);
         consoleUI.start();
     }
 
-    // future: public void startGui() { ... }
-
-    /* --- Delegate network operations to ClientComms --- */
 
     public Map<String, Object> registerStudent(String nome, String email, String password, String numero) {
         return comms.registerStudent(nome, email, password, numero);

@@ -246,7 +246,6 @@ public class ConsoleUI {
     private void handleViewExpiredAnswers() {
         Scanner sc = new Scanner(System.in);
 
-        // 1) Ask manager for expired questions
         var resp = manager.listQuestionsFilter("e");
         if (!"LIST_QUESTIONS_FILTER_OK".equals(resp.get("type"))) {
             System.out.println("Erro: " + resp.getOrDefault("message", "Erro ao obter perguntas expiradas."));
@@ -276,7 +275,6 @@ public class ConsoleUI {
         Object idObj = perguntas.get(escolha).get("id");
         int perguntaId = (idObj instanceof Number) ? ((Number) idObj).intValue() : Integer.parseInt(String.valueOf(idObj));
 
-        // 2) Request question answers/details from server via manager
         var detalheResp = manager.listQuestionAnswers(perguntaId);
         if (!"LIST_QUESTION_ANSWERS_OK".equals(detalheResp.get("type"))) {
             System.out.println("Erro: " + detalheResp.getOrDefault("message", "Erro ao obter respostas."));
@@ -292,7 +290,6 @@ public class ConsoleUI {
         Object pctObj = detalheResp.get("percentagem_certas");
         double percentagem = (pctObj instanceof Number) ? ((Number) pctObj).doubleValue() : 0.0;
 
-        // 3) Print details
         System.out.println("\n============================");
         System.out.println("Enunciado: " + pergunta.get("enunciado"));
         System.out.println("Início: " + pergunta.get("data_inicio"));
@@ -318,7 +315,6 @@ public class ConsoleUI {
         System.out.println("\nPercentagem de corretas: " + percentagem + "%");
         System.out.println("============================\n");
 
-        // 4) Export option (console/UI responsibility)
         System.out.print("Deseja exportar a pergunta para um ficheiro CSV? (s/n): ");
         String exportChoice = sc.nextLine().trim().toLowerCase();
         while (!exportChoice.equals("s") && !exportChoice.equals("n")) {
@@ -445,7 +441,6 @@ public class ConsoleUI {
         if (isDocente) {
             System.out.println("Editar dados de DOCENTE.");
 
-            // 1) Ir buscar dados atuais
             var dadosResp = manager.getUserData("docente", userId);
             if (!"GET_USER_DATA_OK".equals(dadosResp.get("type"))) {
                 System.out.println("Erro ao obter dados do docente.");
@@ -477,7 +472,6 @@ public class ConsoleUI {
         else {
             System.out.println("Editar dados de ESTUDANTE.");
 
-            // 1) Ir buscar dados atuais
             var dadosResp = manager.getUserData("estudante", userId);
             if (!"GET_USER_DATA_OK".equals(dadosResp.get("type"))) {
                 System.out.println("Erro ao obter dados do estudante.");

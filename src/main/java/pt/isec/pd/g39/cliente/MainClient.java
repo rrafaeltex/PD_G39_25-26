@@ -15,7 +15,6 @@ public class MainClient {
         ClientComms clientComms = new ClientComms(directoryIp, directoryPort);
         ClientViewManager manager = new ClientViewManager(clientComms);
         try {
-            // start console UI via manager (future: choose GUI)
             manager.startConsole();
         } catch (Exception e) {
             System.err.println("Erro: " + e.getMessage());

@@ -37,10 +37,6 @@ public class ClientComms {
     }
 
     private void getTCP() throws IOException {
-        /*
-        Solicitam ao serviço de diretoria o endereço IP e porto de escuta TCP do servidor ao
-        qual se devem ligar. Se esta operação não for bem-sucedida, a aplicação terminar.
-         */
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setSoTimeout(5000);
 
@@ -219,15 +215,6 @@ public class ClientComms {
 
 
     private boolean attemptRecoveryLogin(long deadlineMs, boolean alreadyWaitedOnce) {
-        /*
-        Quando a conexão TCP com o servidor atual deixa de estar operacional, a aplicação
-        cliente volta a solicitar ao serviço de diretoria os dados sobre o servidor principal atual.
-        Se for diferente do anterior (que deixou de estar acessível), volta a ligar-se e a
-        autenticar-se, sem envolver o utilizador e tentando passar esta situação de
-        recuperação de falha o mais despercebida possível. Se os dados corresponderem ao
-        mesmo servidor, volta a tentar uma segunda vez 20 segundos depois. Caso a operação
-        não seja bem-sucedida, a aplicação termina.
-        */
         String previousIp = ipServer;
         int previousPort = tcpPortServer;
         RecoveryAction action = attemptRecovery(previousIp, previousPort, alreadyWaitedOnce, Math.max(0, deadlineMs - System.currentTimeMillis()));

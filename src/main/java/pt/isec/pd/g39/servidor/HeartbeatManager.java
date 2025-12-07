@@ -40,14 +40,11 @@ public class HeartbeatManager {
             return;
         started = true;
 
-        // Thread que a cada 5s envia heartbeat p/ diretoria e multicast
         new Thread(HeartbeatManager::heartbeatLoop, "HeartbeatSender").start();
 
-        // Thread que está sempre a ouvir heartbeats via multicast
         new Thread(HeartbeatManager::multicastReceiverLoop, "HeartbeatReceiver").start();
     }
 
-    /** Chamado depois de um UPDATE local na BD (com SQL). */
     public static void sendHeartbeatWithSql(String sql, int newVersion) {
         try {
             sendMulticastHeartbeat(sql, newVersion);
@@ -61,16 +58,14 @@ public class HeartbeatManager {
             try {
                 int version = Database.getVersion();
 
-                // 1) enviar heartbeat p/ diretoria
                 sendHeartbeatToDirectory();
 
-                // 2) enviar heartbeat (sem SQL) p/ multicast
                 sendMulticastHeartbeat(null, version);
 
                 System.out.println("[DEBUG] Sou principal? " + ServerNode.isPrimary());
 
 
-                Thread.sleep(5000);     // 5 segundos
+                Thread.sleep(5000);
             } catch (Exception e) {
                 System.err.println("[ERRO] " + e.getMessage());
 
@@ -100,7 +95,6 @@ public class HeartbeatManager {
             );
             socket.send(packet);
 
-            // tentar obter HEARTBEAT_REPLY com info do principal atual
             byte[] buffer = new byte[1024];
             DatagramPacket resposta = new DatagramPacket(buffer, buffer.length);
             socket.receive(resposta);
@@ -189,11 +183,9 @@ public class HeartbeatManager {
             int remoteVersion = ((Double) json.get("db_version")).intValue();
             String sql = (String) json.get("sql");
 
-            // 1) ignorar heartbeats do próprio servidor
             if (senderIp.equals(localIp) && senderClientPort == clientPort)
                 return;
 
-            // 2) Verificar se é o principal atual
             boolean isPrimaryHeartbeat =
                     senderIp.equals(primaryIp) &&
                             senderClientPort == primaryTcpClients;

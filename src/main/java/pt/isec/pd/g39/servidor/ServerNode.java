@@ -50,7 +50,6 @@ public class ServerNode {
 
             DatabaseSync.startPeerServer(peerServerSocket);
 
-            // Notificar os clientes se necessário (opcional aqui)
         }
     }
 
