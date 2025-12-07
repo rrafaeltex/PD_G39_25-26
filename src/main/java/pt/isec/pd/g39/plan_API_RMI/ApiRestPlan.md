@@ -1,4 +1,4 @@
-# Planeamento da API REST – Sistema de Perguntas (Meta 1)
+# Planeamento da API REST
 
 Este documento define uma API REST equivalente às operações já implementadas no sistema
 (tal como existem no `ClientHandler`), mas expressas em estilo REST.
@@ -200,9 +200,3 @@ Todas as respostas seguem o padrão interno usado no sistema real:
 ```
 
 ---
-
-# 6. Nota Final
-Este planeamento REST é totalmente coerente com:
-- comandos existentes (`type`) em `ClientHandler.java`
-- formato JSON real usado pelo cliente (`ClientComms`)
-- requisitos da Meta 1 para definição de REST
