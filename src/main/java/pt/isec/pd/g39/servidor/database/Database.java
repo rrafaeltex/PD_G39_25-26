@@ -13,7 +13,7 @@ public class Database {
 
     private static String dbPath;
 
-    // Chamada no arranque do servidor com o diretório da BD
+
     public static void configure(String dbFilePath) {
         dbPath = dbFilePath;
     }
@@ -119,8 +119,6 @@ public class Database {
             );
         """);
     }
-
-    //
     // Registar estudante ou professor
 
     private static boolean emailExistsInAnyTable(String email) {
@@ -145,7 +143,7 @@ public class Database {
         }
     }
 
-    // NEW – verifica se já existe algum estudante com este número
+    // verifica se já existe algum estudante com este número
     private static boolean studentNumberExists(int numero) {
         try (Connection conn = DriverManager.getConnection(url());
              PreparedStatement ps = conn.prepareStatement(
@@ -157,12 +155,12 @@ public class Database {
             }
         } catch (SQLException e) {
             System.err.println("[Database] Erro: " + e.getMessage());
-            // Em caso de erro técnico, jogamos pelo seguro e dizemos que "existe"
+
             return true;
         }
     }
 
-    // NEW – verifica se o email já existe noutro utilizador (estudante ou docente)
+    // verifica se o email já existe noutro utilizador (estudante ou docente)
 // perfil: "s" para estudante, "d" para docente
     private static boolean emailExistsInAnyTableExcept(String email, String perfil, int selfIdOrNumero) {
         if (email == null || email.isBlank())
@@ -170,7 +168,7 @@ public class Database {
 
         try (Connection conn = DriverManager.getConnection(url())) {
 
-            // Verificar na tabela estudante
+
             try (PreparedStatement ps = conn.prepareStatement(
                     "SELECT 1 FROM estudante WHERE email = ? AND numero <> ? LIMIT 1")) {
                 ps.setString(1, email);
@@ -181,7 +179,7 @@ public class Database {
                 }
             }
 
-            // Verificar na tabela docente
+
             try (PreparedStatement ps = conn.prepareStatement(
                     "SELECT 1 FROM docente WHERE email = ? AND id <> ? LIMIT 1")) {
                 ps.setString(1, email);
@@ -196,12 +194,12 @@ public class Database {
 
         } catch (SQLException e) {
             System.err.println("[Database] Erro: " + e.getMessage());
-            // Em caso de erro técnico, jogamos pelo seguro
+
             return true;
         }
     }
 
-    // NEW – verifica se o novo número já está em uso por OUTRO estudante
+    // verifica se o novo número já está em uso por OUTRO estudante
     private static boolean studentNumberTakenByOther(int novoNumero, int numeroAtual) {
         if (novoNumero == numeroAtual)
             return false;
@@ -238,7 +236,7 @@ public class Database {
                 numero + ", '" + nome + "', '" + email + "', '" + password + "')";
 
         try {
-            // Usamos executeLocalUpdate para garantir que a versão da BD sobe!
+
             executeLocalUpdate(sql);
             return true;
         } catch (SQLException e) {
@@ -347,7 +345,7 @@ public class Database {
 
 
     public static Map<String, Object> checkLogin(String email, String password) {
-        // Primeiro tenta ver se é Estudante
+
         String sqlEstudante = "SELECT * FROM estudante WHERE email = ? AND password = ?";
 
         try (Connection conn = DriverManager.getConnection(url());
@@ -358,7 +356,7 @@ public class Database {
             ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
-                // Encontrou estudante!
+
                 return Map.of(
                         "sucesso", true,
                         "nome", rs.getString("nome"),
@@ -370,7 +368,7 @@ public class Database {
             System.err.println("[Database] Erro: " + e.getMessage());
         }
 
-        // Se não for estudante, tenta ver se é Docente
+
         String sqlDocente = "SELECT * FROM docente WHERE email = ? AND password = ?";
         try (Connection conn = DriverManager.getConnection(url());
              PreparedStatement ps = conn.prepareStatement(sqlDocente)) {
@@ -380,7 +378,7 @@ public class Database {
             ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
-                // Encontrou docente!
+
                 return Map.of(
                         "sucesso", true,
                         "nome", rs.getString("nome"),
@@ -502,7 +500,7 @@ public class Database {
 
         DatabaseWriteLock.waitIfLocked();
         try {
-            // update pergunta
+
             String sql1 = "UPDATE pergunta SET enunciado='" + enunciado +
                     "', data_inicio='" + dataInicio +
                     "', data_fim='" + dataFim +
@@ -510,11 +508,11 @@ public class Database {
 
             executeLocalUpdate(sql1);
 
-            // apagar opções antigas
+
             String sql2 = "DELETE FROM opcao WHERE pergunta_id=" + perguntaId;
             executeLocalUpdate(sql2);
 
-            // inserir novas
+
             for (Map<String, Object> op : novasOpcoes) {
                 String sql3 = "INSERT INTO opcao (pergunta_id, letra, texto, correta) VALUES (" +
                         perguntaId + ", '" + op.get("letra") + "', '" + op.get("texto") +
@@ -530,7 +528,7 @@ public class Database {
         }
     }
 
-    // NEW – atualizar dados do DOCENTE (nome, email, password)
+    // atualizar dados do DOCENTE (nome, email, password)
     public static boolean updateDocente(int docenteId, String nome, String email, String password) {
 
         if (emailExistsInAnyTableExcept(email, "d", docenteId)) {
@@ -555,7 +553,7 @@ public class Database {
         }
     }
 
-    // NEW – atualizar dados do ESTUDANTE (nº, nome, email, password)
+    // atualizar dados do ESTUDANTE (número, nome, email, password)
     public static boolean updateEstudante(int numeroAtual, int novoNumero, String nome, String email, String password) {
 
         if (emailExistsInAnyTableExcept(email, "s", numeroAtual)) {
@@ -761,7 +759,7 @@ public class Database {
                 ResultSet rs = ps.executeQuery();
 
                 if (!rs.next())
-                    return null; // Não existe ou não expirou
+                    return null;
 
                 pergunta.put("id", rs.getInt("id"));
                 pergunta.put("enunciado", rs.getString("enunciado"));
@@ -795,7 +793,7 @@ public class Database {
                 while (rs.next()) {
                     total++;
 
-                    // Verificar se é correta
+
                     boolean correta = false;
                     for (Map<String, Object> op : opcoes) {
                         if (op.get("letra").equals(rs.getString("opcao_escolhida"))) {
@@ -867,7 +865,7 @@ public class Database {
 
     // -------- Execução de queries (principal / secundário) --------
 
-    // Usado pelo servidor principal quando um cliente faz uma operação
+
     public static void executeLocalUpdate(String sql) throws SQLException {
 
         DatabaseWriteLock.waitIfLocked();
@@ -946,13 +944,13 @@ public class Database {
                     ResultSet rs = ps.executeQuery();
 
                     if (rs.next()) {
-                        return rs.getInt("id"); // ID do docente
+                        return rs.getInt("id");
                     }
                 }
             }
         }
 
-        return -1; // não encontrado
+        return -1;
     }
 
 
@@ -960,7 +958,7 @@ public class Database {
     //
 
     public static Map<String, Object> getPerguntaAtivaPorCodigo(String codigo) {
-        // 1. Buscar APENAS pelo código (removemos o filtro de data do SQL)
+
         String sql = "SELECT id, enunciado, data_inicio, data_fim FROM pergunta WHERE codigo_acesso = ?";
 
         try (Connection conn = DriverManager.getConnection(url());
@@ -970,19 +968,18 @@ public class Database {
             ResultSet rs = ps.executeQuery();
 
             if (rs.next()) {
-                // Dados da Base de Dados
+
                 int perguntaId = rs.getInt("id");
                 String enunciado = rs.getString("enunciado");
                 String inicioStr = rs.getString("data_inicio"); // ex: "2025-11-23 00:30"
                 String fimStr = rs.getString("data_fim");       // ex: "2025-11-23 00:40"
 
-                // 2. DEBUG: Vamos ver o que o computador está a ler!
+                // 2. DEBUG: Vamos ver o que o computador está a ler
                 System.out.println("--- DEBUG HORA ---");
                 System.out.println("Pergunta encontrada: " + enunciado);
                 System.out.println("Início BD: " + inicioStr);
                 System.out.println("Fim BD:    " + fimStr);
 
-                // 3. Validação de Datas em JAVA (Mais seguro)
                 try {
                     java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
                     java.time.LocalDateTime inicio = java.time.LocalDateTime.parse(inicioStr, formatter);
@@ -1002,12 +999,11 @@ public class Database {
 
                 } catch (Exception e) {
                     System.err.println("Erro ao processar datas (formato errado?): " + e.getMessage());
-                    // Se der erro nas datas, deixamos passar ou retornamos null?
-                    // Para teste, retornamos null para obrigar a corrigir o formato.
+
                     return null;
                 }
 
-                // Se passou nas datas, vamos buscar as opções
+
                 List<Map<String, Object>> opcoes = new java.util.ArrayList<>();
                 try (PreparedStatement psOp = conn.prepareStatement(
                         "SELECT letra, texto FROM opcao WHERE pergunta_id = ? ORDER BY letra")) {
@@ -1033,10 +1029,9 @@ public class Database {
         } catch (SQLException e) {
             System.err.println("[Database] Erro: " + e.getMessage());
         }
-        return null; // Não encontrada
+        return null;
     }
 
-    //
 
     public static boolean jaRespondeu(int alunoId, int perguntaId) {
         String sql = "SELECT COUNT(*) FROM resposta WHERE estudante_numero = ? AND pergunta_id = ?";
@@ -1048,7 +1043,7 @@ public class Database {
             ps.setInt(2, perguntaId);
 
             try (ResultSet rs = ps.executeQuery()) {
-                // O COUNT(*) devolve sempre uma linha, mesmo que seja 0
+
                 if (rs.next()) {
                     int count = rs.getInt(1);
                     System.out.println("DEBUG: Aluno " + alunoId + " tem " + count + " respostas na pergunta " + perguntaId);
@@ -1061,17 +1056,16 @@ public class Database {
             System.err.println("[Database] Erro: " + e.getMessage());
         }
 
-        // Se der erro técnico, assumimos FALSE para conseguires testar (mas cuidado em produção!)
+
         return false;
     }
 
     // 3. Registar a resposta
     public static boolean registarResposta(int alunoId, int perguntaId, String opcao) {
 
-        // --- MUDANÇA AQUI ---
+
         java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         String dataHora = java.time.LocalDateTime.now().format(formatter);
-        // --------------------
 
         String sql = "INSERT INTO resposta (estudante_numero, pergunta_id, opcao_escolhida, data_resposta) " +
                 "VALUES (" + alunoId + ", " + perguntaId + ", '" + opcao + "', '" + dataHora + "')";
@@ -1109,7 +1103,7 @@ public class Database {
             if (isDocente) {
                 map.put("id", rs.getInt("id"));
             } else {
-                map.put("id", rs.getInt("numero")); // para manter compatível com o resto
+                map.put("id", rs.getInt("numero"));
             }
             map.put("nome", rs.getString("nome"));
             map.put("email", rs.getString("email"));

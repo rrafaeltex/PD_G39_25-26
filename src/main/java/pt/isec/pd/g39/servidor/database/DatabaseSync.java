@@ -51,7 +51,7 @@ public class DatabaseSync {
 
             while (true) {
                 try {
-                    // 1) Aceitar ligação de um secundário
+
                     var socket = peerServerSocket.accept();
                     var out = socket.getOutputStream();
 
@@ -61,17 +61,15 @@ public class DatabaseSync {
                         String dbPath = Database.getPath();
                         File f = new File(dbPath);
 
-                        // Enviar tamanho
                         out.write(longToBytes(f.length()));
 
-                        // Enviar conteúdo
                         try (var fis = new java.io.FileInputStream(f)) {
                             fis.transferTo(out);
                         }
 
                         System.out.println("[PRIMARY] Sincronização concluída — desbloqueando escritas.");
                     } finally {
-                        // 3) DESBLOQUEAR SEMPRE MESMO SE DER ERRO A MEIO
+
                         DatabaseWriteLock.unlock();
                     }
 
