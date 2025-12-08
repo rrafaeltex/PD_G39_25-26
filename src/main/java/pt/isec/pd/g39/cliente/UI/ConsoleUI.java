@@ -143,8 +143,21 @@ public class ConsoleUI {
         String di = scanner.nextLine();
         System.out.print("Data fim (yyyy-MM-dd HH:mm): ");
         String df = scanner.nextLine();
-        System.out.print("Quantas opções? ");
-        int n = Integer.parseInt(scanner.nextLine());
+        int n;
+        while (true) {
+            System.out.print("Quantas opções? ");
+            String line = scanner.nextLine().trim();
+            try {
+                n = Integer.parseInt(line);
+                if (n <= 0) {
+                    System.out.println("Por favor insira um inteiro positivo.");
+                    continue;
+                }
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Numero invalido!");
+            }
+        }
         List<Map<String, Object>> opcoes = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             String letra = String.valueOf((char) ('A' + i));
@@ -190,9 +203,9 @@ public class ConsoleUI {
 
         System.out.println("Novo enunciado (ENTER mantém): " + enunciado);
         String novoEn = scanner.nextLine(); if (novoEn.isBlank()) novoEn = enunciado;
-        System.out.println("Nova data início (ENTER mantém): " + dataInicio);
+        System.out.println("Nova data início (yyyy-MM-dd HH:mm)(ENTER mantém): " + dataInicio);
         String novaDi = scanner.nextLine(); if (novaDi.isBlank()) novaDi = dataInicio;
-        System.out.println("Nova data fim (ENTER mantém): " + dataFim);
+        System.out.println("Nova data fim (yyyy-MM-dd HH:mm)(ENTER mantém): " + dataFim);
         String novaDf = scanner.nextLine(); if (novaDf.isBlank()) novaDf = dataFim;
 
         for (Map<String, Object> op : opcoes) {
@@ -238,11 +251,10 @@ public class ConsoleUI {
         List<Map<String, Object>> perguntas = (List<Map<String, Object>>) resp.get("perguntas");
         for (int i = 0; i < perguntas.size(); i++) {
             var p = perguntas.get(i);
-            System.out.println(i + " -> " + p.get("enunciado") + " // " + p.get("data_inicio") + " até " + p.get("data_fim"));
+            System.out.println(i + " -> " + p.get("enunciado") + " // " + p.get("data_inicio") + " até " + p.get("data_fim") + "// Código: " + p.get("codigo_acesso"));
         }
     }
 
-    // java
     private void handleViewExpiredAnswers() {
         Scanner sc = new Scanner(System.in);
 
@@ -490,7 +502,6 @@ public class ConsoleUI {
             } else {
                 throw new IllegalStateException("Valor 'numero' inválido no JSON: " + numObj);
             }
-//            int oldNumero = ((Double) dadosResp.get("numero")).intValue();
 
             System.out.println("Número atual: " + oldNumero);
             System.out.print("Novo número (ENTER mantém): ");

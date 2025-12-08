@@ -55,7 +55,7 @@ public class DatabaseSync {
                     var socket = peerServerSocket.accept();
                     var out = socket.getOutputStream();
 
-                    // 2) BLOQUEAR ESCRITAS ENQUANTO COPIAMOS A BD
+                    // BLOQUEAR ESCRITAS ENQUANTO COPIAMOS A BD
                     DatabaseWriteLock.lock();
                     try {
                         String dbPath = Database.getPath();

@@ -209,11 +209,6 @@ public class ClientHandler extends Thread {
         }
     }
 
-
-    // =======================================================
-    // FUNÇÃO DE RESPOSTA (O "Tradutor" de saída)
-    // =======================================================
-
     /**
      * Envia uma resposta JSON para o cliente.
      * @param type O tipo de resposta (ex: "LOGIN_OK")
@@ -227,12 +222,10 @@ public class ClientHandler extends Thread {
             response.putAll(data);
         }
 
-        // GSON: Traduz o Mapa "response" para um texto JSON
         String jsonResponse = gson.toJson(response);
 
         System.out.println("[CLIENT " + socket.getPort() + " ⬅] " + jsonResponse);
 
-        // Envia o texto JSON para o cliente
         out.println(jsonResponse);
     }
 

@@ -22,7 +22,6 @@ public class Database {
         return "jdbc:sqlite:" + dbPath;
     }
 
-    // Inicializa BD: cria tabelas se não existirem e garante db_version
     public static void initializeIfNeeded() throws SQLException {
         File f = new File(dbPath);
         boolean createNew = !f.exists();
@@ -119,7 +118,6 @@ public class Database {
             );
         """);
     }
-    // Registar estudante ou professor
 
     private static boolean emailExistsInAnyTable(String email) {
         if (email == null || email.isBlank()) return false;
@@ -272,7 +270,6 @@ public class Database {
         DatabaseWriteLock.waitIfLocked();
 
         try {
-            // 1) Gerar código único (usando leitura simples)
             String codigo;
             while (true) {
                 codigo = CodeGenerator.generateCode(6);
@@ -289,7 +286,6 @@ public class Database {
                 }
             }
 
-            // 2) Inserir pergunta
             String sqlPergunta = String.format(
                     "INSERT INTO pergunta (docente_id, enunciado, data_inicio, data_fim, codigo_acesso) " +
                             "VALUES (%d, '%s', '%s', '%s', '%s')",
@@ -302,7 +298,6 @@ public class Database {
 
             executeLocalUpdate(sqlPergunta);
 
-            // 3) Obter ID gerado
             int perguntaId;
             try (Connection c = DriverManager.getConnection(url());
                  Statement s = c.createStatement()) {
@@ -314,7 +309,6 @@ public class Database {
                 perguntaId = rs.getInt(1);
             }
 
-            // 4) Inserir opções
             for (Map<String, Object> op : opcoes) {
 
                 String letra = ((String) op.get("letra")).replace("'", "''");
@@ -683,7 +677,7 @@ public class Database {
           AND datetime(p.data_fim) < datetime('now')
     """);
 
-        // Se o aluno quiser filtrar por data (ex: "2025-01-05")
+        // Se o aluno quiser filtrar por data
         if (filtroData != null && !filtroData.isBlank()) {
             sql.append(" AND r.data_resposta LIKE ? ");
         }
@@ -863,9 +857,6 @@ public class Database {
         }
     }
 
-    // -------- Execução de queries (principal / secundário) --------
-
-
     public static void executeLocalUpdate(String sql) throws SQLException {
 
         DatabaseWriteLock.waitIfLocked();
@@ -953,81 +944,66 @@ public class Database {
         return -1;
     }
 
-
-
-    //
-
     public static Map<String, Object> getPerguntaAtivaPorCodigo(String codigo) {
+        if (codigo == null) return null;
+        codigo = codigo.trim();
 
-        String sql = "SELECT id, enunciado, data_inicio, data_fim FROM pergunta WHERE codigo_acesso = ?";
+        String sql = """
+        SELECT id, codigo_acesso, enunciado, data_inicio, data_fim
+        FROM pergunta
+        WHERE trim(codigo_acesso) = trim(?) COLLATE NOCASE
+          AND datetime(data_inicio) <= datetime('now')
+          AND datetime(data_fim) >= datetime('now')
+        """;
 
         try (Connection conn = DriverManager.getConnection(url());
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
             ps.setString(1, codigo);
-            ResultSet rs = ps.executeQuery();
-
-            if (rs.next()) {
-
-                int perguntaId = rs.getInt("id");
-                String enunciado = rs.getString("enunciado");
-                String inicioStr = rs.getString("data_inicio"); // ex: "2025-11-23 00:30"
-                String fimStr = rs.getString("data_fim");       // ex: "2025-11-23 00:40"
-
-                // 2. DEBUG: Vamos ver o que o computador está a ler
-                System.out.println("--- DEBUG HORA ---");
-                System.out.println("Pergunta encontrada: " + enunciado);
-                System.out.println("Início BD: " + inicioStr);
-                System.out.println("Fim BD:    " + fimStr);
-
-                try {
-                    java.time.format.DateTimeFormatter formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-                    java.time.LocalDateTime inicio = java.time.LocalDateTime.parse(inicioStr, formatter);
-                    java.time.LocalDateTime fim = java.time.LocalDateTime.parse(fimStr, formatter);
-                    java.time.LocalDateTime agora = java.time.LocalDateTime.now();
-
-                    System.out.println("Agora:     " + agora.format(formatter)); // Vê se esta hora bate certo!
-
-                    if (agora.isBefore(inicio)) {
-                        System.out.println("ERRO: Ainda não começou.");
-                        return null;
-                    }
-                    if (agora.isAfter(fim)) {
-                        System.out.println("ERRO: Já acabou.");
-                        return null;
-                    }
-
-                } catch (Exception e) {
-                    System.err.println("Erro ao processar datas (formato errado?): " + e.getMessage());
-
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    System.out.println("DEBUG: Código '" + codigo + "' não existe ou pergunta não está ativa.");
                     return null;
                 }
 
+                int perguntaId = rs.getInt("id");
+                String codigoDb = rs.getString("codigo_acesso");
+                String enunciado = rs.getString("enunciado");
+                String inicioStr = rs.getString("data_inicio");
+                String fimStr = rs.getString("data_fim");
+
+                System.out.println("--- DEBUG HORA ---");
+                System.out.println("Pergunta encontrada: " + enunciado);
+                System.out.println("Código DB: " + codigoDb);
+                System.out.println("Início BD: " + inicioStr);
+                System.out.println("Fim BD:    " + fimStr);
 
                 List<Map<String, Object>> opcoes = new java.util.ArrayList<>();
                 try (PreparedStatement psOp = conn.prepareStatement(
                         "SELECT letra, texto FROM opcao WHERE pergunta_id = ? ORDER BY letra")) {
                     psOp.setInt(1, perguntaId);
-                    ResultSet rsOp = psOp.executeQuery();
-                    while (rsOp.next()) {
-                        opcoes.add(Map.of(
-                                "letra", rsOp.getString("letra"),
-                                "texto", rsOp.getString("texto")
-                        ));
+                    try (ResultSet rsOp = psOp.executeQuery()) {
+                        while (rsOp.next()) {
+                            opcoes.add(Map.of(
+                                    "letra", rsOp.getString("letra"),
+                                    "texto", rsOp.getString("texto")
+                            ));
+                        }
                     }
                 }
 
                 return Map.of(
                         "id", perguntaId,
+                        "codigo_acesso", codigoDb,
                         "enunciado", enunciado,
+                        "data_inicio", inicioStr,
+                        "data_fim", fimStr,
                         "opcoes", opcoes
                 );
-            } else {
-                System.out.println("DEBUG: Código " + codigo + " não existe na tabela pergunta.");
             }
 
         } catch (SQLException e) {
-            System.err.println("[Database] Erro: " + e.getMessage());
+            System.err.println("[Database] Erro em getPerguntaAtivaPorCodigo: " + e.getMessage());
         }
         return null;
     }
@@ -1060,7 +1036,7 @@ public class Database {
         return false;
     }
 
-    // 3. Registar a resposta
+    // Registar respostas
     public static boolean registarResposta(int alunoId, int perguntaId, String opcao) {
 
 

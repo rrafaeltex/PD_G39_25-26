@@ -187,23 +187,18 @@ public class ClientComms {
         boolean changed = !(ipServer.equals(previousIp) && tcpPortServer == previousPort);
 
         if (changed) {
-            // Servidor principal mudou → tentar imediatamente
             return RecoveryAction.RETRY_IMMEDIATE;
         }
 
-        // Servidor ainda é o mesmo
         if (alreadyWaitedOnce) {
             System.out.println("Mesmo servidor principal e já foi tentado aguardar. A terminar.");
             return RecoveryAction.GIVE_UP;
         }
 
-        // Se a janela de login já expirou → abortar
         if (maxWaitMs <= 0) {
             System.out.println("Janela de login expirada durante espera.");
             return RecoveryAction.GIVE_UP;
         }
-
-        // Espera no máximo 20 segundos, mas nunca excede a janela restante
         long wait = Math.min(20_000L, maxWaitMs);
 
         try {
@@ -404,7 +399,6 @@ public class ClientComms {
     }
 
 
-    // NEW – editar dados de DOCENTE
     public Map<String, Object> editTeacher(int docenteId, String nome, String email, String password) {
         String msg = gson.toJson(Map.of(
                 "type", "EDIT_USER_DATA",
@@ -417,7 +411,6 @@ public class ClientComms {
         return sendAndReceive(msg);
     }
 
-    // NEW – editar dados de ESTUDANTE (inclui novo número)
     public Map<String, Object> editStudent(int numeroAtual, int novoNumero,
                                            String nome, String email, String password) {
         String msg = gson.toJson(Map.of(

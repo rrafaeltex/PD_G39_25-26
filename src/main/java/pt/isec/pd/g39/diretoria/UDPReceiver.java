@@ -43,7 +43,6 @@ public class UDPReceiver extends Thread {
     private void processMessage(DatagramSocket socket, DatagramPacket packet, String msg) throws Exception {
         var json = gson.fromJson(msg, java.util.Map.class);
         String type = (String) json.get("type");
-
         if ("REGISTER_SERVER".equals(type)) {
             int tcpClients = ((Double) json.get("tcp_clients")).intValue();
             int tcpPeers = ((Double) json.get("tcp_peers")).intValue();
@@ -65,15 +64,11 @@ public class UDPReceiver extends Thread {
 
             return;
         }
-
-
         if ("UNREGISTER".equals(type)) {
             int tcpClients = ((Double) json.get("tcp_clients")).intValue();
             direcao.unregister(packet.getAddress(), tcpClients);
             return;
         }
-
-
         if ("HEARTBEAT".equals(type)) {
             int tcpClients = ((Double) json.get("tcp_clients")).intValue();
 
@@ -97,9 +92,6 @@ public class UDPReceiver extends Thread {
             return;
         }
 
-        // ------------------------------------------
-        // GET_PRIMARY → pedido do cliente
-        // ------------------------------------------
         if ("GET_PRIMARY".equals(type)) {
             ServidorInfo principal = direcao.getPrincipal();
 
